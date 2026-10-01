@@ -30,10 +30,8 @@ Application use cases access external integrations through ports.
 
 ## Project Status
 
-Initial project structure.
+The initial FastAPI service and environment configuration are implemented.
 
-Setup and execution instructions will be added as implementation
-progresses.
 ## Local Development Setup
 
 Python 3.14 is required for the initial project configuration.
@@ -42,7 +40,7 @@ From the project root, activate the virtual environment and install the package:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e .
+python -m pip install -e ".[dev]"
 ```
 
 Verify the package installation:
@@ -51,7 +49,35 @@ Verify the package installation:
 python -c "import alarm_service; print('Package imported successfully')"
 ```
 
-The API, database migrations, and Docker environment are not implemented yet.
+### Run the API
+
+Optionally copy `.env.example` to `.env` to customize the service:
+
+```powershell
+Copy-Item .env.example .env
+python -m uvicorn alarm_service.main:app --reload
+```
+
+- Status endpoint: http://127.0.0.1:8000/status
+- Interactive API documentation: http://127.0.0.1:8000/docs
+- OpenAPI schema: http://127.0.0.1:8000/openapi.json
+
+`GET /status` returns `{"status": "ok"}`. This endpoint checks service
+liveness only; database readiness will be implemented with persistence.
+
+Configuration uses the `ALARM_` environment variable prefix. Environment
+variables take precedence over `.env`. Set `ALARM_DOCS_ENABLED=false` to
+disable Swagger and the OpenAPI endpoint. Keep `.env` out of version control.
+
+### Development Checks
+
+```powershell
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest
+```
+
+Database migrations, alarm queries, and Docker are not implemented yet.
 
 ## Project Structure
 

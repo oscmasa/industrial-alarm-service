@@ -28,3 +28,4 @@ htmlcov/
 # Archivos temporales
 *.log
 *~
+.pytest_tmp/
