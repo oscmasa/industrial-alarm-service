@@ -30,7 +30,7 @@ Application use cases access external integrations through ports.
 
 ## Project Status
 
-The initial FastAPI service and environment configuration are implemented.
+The initial FastAPI service, environment configuration, and Docker Compose setup are implemented.
 
 ## Local Development Setup
 
@@ -77,7 +77,46 @@ python -m ruff format --check .
 python -m pytest
 ```
 
-Database migrations, alarm queries, and Docker are not implemented yet.
+Database migrations and alarm queries are not implemented yet.
+
+## Docker Setup
+
+With Docker Desktop running in Linux container mode, start the API and PostgreSQL:
+
+```powershell
+docker compose up --build -d --wait
+```
+
+No local Python installation or `.env` file is required. Optional configuration
+is documented in `.env.example`. The default database credentials are intended
+only for local development.
+
+The API is available at http://127.0.0.1:8000/status and Swagger at
+http://127.0.0.1:8000/docs. Stop any locally running Uvicorn server first, or
+set `API_PORT=8001` in `.env` to use another port.
+
+Check the services and view their logs:
+
+```powershell
+docker compose ps
+docker compose logs api db
+```
+
+The API starts after PostgreSQL reports readiness. Its `/status` health check
+verifies HTTP liveness; it does not query the database yet. PostgreSQL runs on
+the internal Compose network and its port is not exposed to the host. The API
+runs as a non-root user, without development auto-reload.
+
+Stop and remove the containers while preserving database data:
+
+```powershell
+docker compose down
+```
+
+The `postgres_data` named volume persists across container recreation. Changing
+database credentials in `.env` does not change an already initialized database.
+`docker compose down -v` deletes the database volume and should only be used
+when intentionally resetting local data.
 
 ## Project Structure
 
