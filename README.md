@@ -17,6 +17,18 @@ The data is synthetic and intentionally includes data quality issues.
 See [the dataset contract](datasets/README.md) for the process diagram, equipment
 catalog, field definitions, normalization rules, rejection policy, and generation plan.
 
+## Generate Sample Data
+
+```powershell
+python -m pip install -e ".[dev]"
+python scripts/generate_dataset.py --rows 10000 --seed 42
+```
+
+Outputs: `datasets/raw/alarms.csv` and `datasets/raw/alarms.manifest.json`.
+The default dataset targets 9,500 accepted events, 300 rejected rows, and 200
+duplicates. The manifest records generation expectations; it does not validate
+an actual import. See the dataset contract for configurable rates and warnings.
+
 ## Scope
 
 - Reproducible CSV dataset generation.
@@ -36,7 +48,7 @@ Application use cases access external integrations through ports.
 ## Project Status
 
 The initial FastAPI service, environment configuration, and Docker Compose setup are implemented.
-The dataset contract and industrial catalog are documented; generation and ingestion are pending.
+The dataset contract, industrial catalog, and reproducible CSV generator are implemented. Ingestion is pending.
 
 ## Local Development Setup
 

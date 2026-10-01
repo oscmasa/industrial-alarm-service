@@ -32,7 +32,7 @@ Catalog identifiers use uppercase ASCII. Each tag belongs to exactly one piece
 of equipment. Equipment and units are derived from the catalog, not duplicated
 in each CSV row. Equipment identifiers are stable even if display names change.
 
-| Equipment ID | Equipment | Tag | Unit | Alarm code | Severity | Synthetic trigger |
+| Equipment ID | Equipment | Tag | Unit | Alarm code | Default severity | Synthetic trigger |
 | --- | --- | --- | --- | --- | --- | --- |
 | TANK_IN_01 | Inlet tank | TANK_IN_01_LEVEL | % | LOW_LEVEL | HIGH | value < 15 |
 | TANK_IN_01 | Inlet tank | TANK_IN_01_LEVEL | % | HIGH_LEVEL | MEDIUM | value > 90 |
@@ -127,8 +127,8 @@ API time ranges will use an inclusive start and exclusive end.
 | CRITICAL | CRITICAL, CRITICA, CRÍTICA, 4 |
 
 Numbers are source conventions, not an industry-wide standard. Unknown aliases
-are rejected. A valid severity that contradicts the catalog condition is also
-rejected; do not silently overwrite the source priority.
+are rejected. A valid severity different from the catalog default is preserved
+with a SEVERITY_DIFFERS_FROM_DEFAULT warning; priorities may change over time.
 
 ### Values and Optional Fields
 
@@ -139,8 +139,9 @@ A nonempty, unparseable value is rejected rather than silently converted to NULL
 
 Level values must be between 0 and 100. Flow, pressure, differential pressure,
 and temperature must be nonnegative in this synthetic catalog. Boolean tags
-accept only numeric 0 or 1. When a value is supplied, it must satisfy the
-catalog trigger for the activation; otherwise reject the inconsistent record.
+accept only numeric 0 or 1. A supplied value that does not satisfy the synthetic
+trigger is accepted with a VALUE_TRIGGER_MISMATCH warning: the captured value
+may differ from the measurement at the activation instant.
 Missing values are allowed because a SCADA event may omit the captured measurement.
 Missing messages are also allowed. Do not invent either field or truncate messages.
 
@@ -158,10 +159,8 @@ Stable rejection reasons will cover:
 - `UNKNOWN_ALARM_CODE`
 - `INVALID_TAG_ALARM_COMBINATION`
 - `UNKNOWN_SEVERITY`
-- `SEVERITY_MISMATCH`
 - `INVALID_VALUE`
 - `VALUE_OUT_OF_RANGE`
-- `VALUE_TRIGGER_MISMATCH`
 - `MESSAGE_TOO_LONG`
 - `MALFORMED_ROW`
 - `DUPLICATE_CONFLICT`
@@ -193,28 +192,31 @@ with different IDs are counted, even when their timestamp and tag match.
 
 Default seed: 42. Default output: 10,000 rows. Default period: September 2026,
 from September 1 at 00:00 local time (inclusive) to October 1 at 00:00 (exclusive).
-Assume daily operation from 06git add README.md datasets/README.md:00 to 22:00 local time, with no activations generated
+Assume daily operation from 06:00 to 22:00 local time, with no activations generated
 outside this window. These hours are fictional assumptions.
 
 For the default dataset, use disjoint generation categories:
 
 | Category | Rows | Purpose |
 | --- | --- | --- |
-| Canonical valid events | 7,000 | Clean baseline |
-| Recoverable variants | 1,500 | Aliases, date/decimal formats, whitespace, or optional nulls |
-| Invalid events | 1,000 | Required nulls, invalid dates, unknown identifiers, or inconsistent values |
-| Exact duplicate rows | 500 | Copies of earlier valid events |
+| Canonical valid events | 8,500 | Valid baseline, including some accepted warnings |
+| Recoverable variants | 1,000 | Aliases, date/decimal formats, whitespace, or optional nulls |
+| Invalid events | 300 | Required nulls, invalid dates, unknown identifiers, or invalid types/ranges |
+| Exact duplicate rows | 200 | Copies of earlier valid events |
 
-Generate 9,500 unique source events before adding 500 copies. Duplicate references
+Generate 9,800 source rows with fresh IDs before corrupting invalid rows and adding 200 copies. Duplicate references
 must follow their originals. Invalid records must actually violate at least one
 rule. Record the intended category and mutation in a separate generator manifest,
 not in the input CSV. The manifest is verification evidence and must never guide
 acceptance decisions in the importer.
 
-For configurable row counts, allocate 70%, 15%, and 10% using integer floors;
-assign the remainder to duplicates. Require at least 100 rows to keep all categories
-represented. Verify the default expected outcome: 8,500 accepted, 1,000 rejected,
-and 500 duplicates. A repeat import expects zero new alarms.
+For configurable row counts, allocate 10%, 3%, and 2% to recoverable, invalid,
+and duplicate rows using integer floors; assign the remainder to canonical valid
+rows. Rates are configurable and their total must not exceed 80%, preserving
+catalog coverage. Require 100 to 1,000,000 rows and a period of 1 to 366 days.
+These percentages demonstrate functionality; they are not observed plant statistics.
+Default expected outcome: 9,500 accepted, 300 rejected, and 200 duplicates.
+A repeat import expects zero new alarms (9,700 duplicates and 300 rejections).
 
 Generate valid canonical events first, then apply controlled mutations. Use a
 stable random seed, deterministic IDs, ordering, and timestamp formatting so the
@@ -245,5 +247,40 @@ The allowed alarm conditions will initially be a versioned application catalog
 shared by generation and validation. Plant, line, and SCADA source are fixed context
 for this exercise; adding multiple plants would require explicit source scoping.
 
-This document defines the contract. The catalog implementation, generator, and
-normalization pipeline will be delivered in subsequent stages.
+## Generate and Inspect the Dataset
+
+Install the project dependencies first. `tzdata` supplies IANA timezone data on
+Windows; CSV writing, random generation, dates, JSON, and CLI parsing use the
+Python standard library. No Pandas or Faker dependency is needed.
+
+```powershell
+python -m pip install -e ".[dev]"
+python scripts/generate_dataset.py --rows 10000 --seed 42
+```
+
+The generator writes `raw/alarms.csv` and `raw/alarms.manifest.json`. The manifest
+contains the CSV SHA-256, category totals, row-level expected outcomes, mutations,
+warning codes, scenario references, and duplicate provenance. It is not an input
+to the importer. `expected_errors` lists targeted reasons, not necessarily every
+error a future validator might report for that row.
+
+For another period or a more damaged source, write to a separate output:
+
+```powershell
+python scripts/generate_dataset.py --rows 1000 --start 2026-08-01 --end 2026-09-01 --invalid-rate 0.10 --duplicate-rate 0.05 --output datasets/raw/stress.csv
+```
+
+Generation overwrites the selected CSV and adjacent manifest. Reproducibility
+applies to the same parameters, generator/catalog version, Python version, and
+timezone data. Rows are grouped by generation category, not sorted by timestamp;
+CSV ordering must not be treated as event chronology. The generator holds its
+rows in memory; production import processing will instead use bounded batches.
+
+Warnings are not a fifth exclusive outcome. They accompany accepted alarms and
+must be persisted with the event for auditability. Canonical valid records include
+both VALUE_TRIGGER_MISMATCH and SEVERITY_DIFFERS_FROM_DEFAULT examples. Optional
+missing fields do not themselves create warnings. Duplicate warning counts do not
+increase the accepted-event warning count.
+
+The generator and catalog are implemented. Normalization, database persistence,
+reconciled import counters, and repeat-import tests remain subsequent stages.
