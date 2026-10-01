@@ -12,6 +12,11 @@ single SCADA system.
 Each record represents an alarm activation.
 The data is synthetic and intentionally includes data quality issues.
 
+## Dataset Contract
+
+See [the dataset contract](datasets/README.md) for the process diagram, equipment
+catalog, field definitions, normalization rules, rejection policy, and generation plan.
+
 ## Scope
 
 - Reproducible CSV dataset generation.
@@ -31,6 +36,7 @@ Application use cases access external integrations through ports.
 ## Project Status
 
 The initial FastAPI service, environment configuration, and Docker Compose setup are implemented.
+The dataset contract and industrial catalog are documented; generation and ingestion are pending.
 
 ## Local Development Setup
 
