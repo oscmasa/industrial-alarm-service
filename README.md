@@ -367,3 +367,27 @@ import counter constraints, rejection structure, and repeat catalog loading.
 - `tests/unit`: domain and normalization tests.
 - `tests/integration`: database and API tests.
 - `docs`: architecture and API usage documentation.
+
+## Postman Endpoint Checks
+
+Import the collection and local environment from `docs/postman`, then select
+**Industrial Alarm Service - Local**. Its `base_url` defaults to
+`http://127.0.0.1:8000`. Start Docker and import the dataset before execution.
+
+Use **Run collection** to execute 10 read-only requests with 20 concise tests:
+
+1. Service status.
+2. Paginated alarm listing.
+3. Time filter.
+4. Severity filter.
+5. Tag filter.
+6. Combined filters.
+7. Top tags.
+8. Top tags with time and severity filters.
+9. Invalid time range (422).
+10. Invalid page number (422).
+
+Tests check HTTP status, response structure, pagination, alarm filter semantics,
+and ranking limits. The pytest suite covers the remaining edge cases and exact
+aggregation results. Capture the actual Postman Runner summary as submission
+evidence; a collection file alone does not demonstrate a Postman execution.

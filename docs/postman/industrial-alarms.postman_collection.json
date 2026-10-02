@@ -1,0 +1,542 @@
+{
+  "info": {
+    "name": "Industrial Alarm Service",
+    "description": "Ten read-only requests demonstrating service status, pagination, filters, top tags and input validation. Select the local environment and run the collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Service status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/status",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "status"
+          ],
+          "query": []
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Service returns 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Service is running\", function () { pm.expect(pm.response.json()).to.eql({status: \"ok\"}); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alarm list - first page",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/alarms?page=1&page_size=10",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "alarms"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "page_size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Alarm query returns 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Pagination and filters are respected\", function () {",
+              "  const body = pm.response.json();",
+              "  const query = Object.fromEntries(Object.entries(pm.request.url.query.toObject()).map(function (entry) { return [entry[0], decodeURIComponent(String(entry[1]))]; }));",
+              "  pm.expect(body.items).to.be.an(\"array\");",
+              "  pm.expect(body.pagination.page).to.eql(Number(query.page || 1));",
+              "  pm.expect(body.pagination.page_size).to.eql(Number(query.page_size || 50));",
+              "  pm.expect(body.pagination.total).to.be.at.least(0);",
+              "  pm.expect(body.items.length).to.be.at.most(body.pagination.page_size);",
+              "  body.items.forEach(function (alarm) {",
+              "    pm.expect(alarm.event_id).to.match(/^EVT-[0-9]{8}$/);",
+              "    if (query.severity) pm.expect(alarm.severity).to.eql(query.severity);",
+              "    if (query.tag) pm.expect(alarm.tag).to.eql(query.tag.trim().toUpperCase());",
+              "    if (query.start_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.at.least(Date.parse(query.start_time));",
+              "    if (query.end_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.below(Date.parse(query.end_time));",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alarm filter - plant local day",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/alarms?start_time=2026-09-15T05%3A00%3A00Z&end_time=2026-09-16T05%3A00%3A00Z",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "alarms"
+          ],
+          "query": [
+            {
+              "key": "start_time",
+              "value": "2026-09-15T05:00:00Z"
+            },
+            {
+              "key": "end_time",
+              "value": "2026-09-16T05:00:00Z"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Alarm query returns 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Pagination and filters are respected\", function () {",
+              "  const body = pm.response.json();",
+              "  const query = Object.fromEntries(Object.entries(pm.request.url.query.toObject()).map(function (entry) { return [entry[0], decodeURIComponent(String(entry[1]))]; }));",
+              "  pm.expect(body.items).to.be.an(\"array\");",
+              "  pm.expect(body.pagination.page).to.eql(Number(query.page || 1));",
+              "  pm.expect(body.pagination.page_size).to.eql(Number(query.page_size || 50));",
+              "  pm.expect(body.pagination.total).to.be.at.least(0);",
+              "  pm.expect(body.items.length).to.be.at.most(body.pagination.page_size);",
+              "  body.items.forEach(function (alarm) {",
+              "    pm.expect(alarm.event_id).to.match(/^EVT-[0-9]{8}$/);",
+              "    if (query.severity) pm.expect(alarm.severity).to.eql(query.severity);",
+              "    if (query.tag) pm.expect(alarm.tag).to.eql(query.tag.trim().toUpperCase());",
+              "    if (query.start_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.at.least(Date.parse(query.start_time));",
+              "    if (query.end_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.below(Date.parse(query.end_time));",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alarm filter - severity",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/alarms?severity=HIGH",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "alarms"
+          ],
+          "query": [
+            {
+              "key": "severity",
+              "value": "HIGH"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Alarm query returns 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Pagination and filters are respected\", function () {",
+              "  const body = pm.response.json();",
+              "  const query = Object.fromEntries(Object.entries(pm.request.url.query.toObject()).map(function (entry) { return [entry[0], decodeURIComponent(String(entry[1]))]; }));",
+              "  pm.expect(body.items).to.be.an(\"array\");",
+              "  pm.expect(body.pagination.page).to.eql(Number(query.page || 1));",
+              "  pm.expect(body.pagination.page_size).to.eql(Number(query.page_size || 50));",
+              "  pm.expect(body.pagination.total).to.be.at.least(0);",
+              "  pm.expect(body.items.length).to.be.at.most(body.pagination.page_size);",
+              "  body.items.forEach(function (alarm) {",
+              "    pm.expect(alarm.event_id).to.match(/^EVT-[0-9]{8}$/);",
+              "    if (query.severity) pm.expect(alarm.severity).to.eql(query.severity);",
+              "    if (query.tag) pm.expect(alarm.tag).to.eql(query.tag.trim().toUpperCase());",
+              "    if (query.start_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.at.least(Date.parse(query.start_time));",
+              "    if (query.end_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.below(Date.parse(query.end_time));",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alarm filter - normalized tag",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/alarms?tag=%20pump_01_flow%20",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "alarms"
+          ],
+          "query": [
+            {
+              "key": "tag",
+              "value": " pump_01_flow "
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Alarm query returns 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Pagination and filters are respected\", function () {",
+              "  const body = pm.response.json();",
+              "  const query = Object.fromEntries(Object.entries(pm.request.url.query.toObject()).map(function (entry) { return [entry[0], decodeURIComponent(String(entry[1]))]; }));",
+              "  pm.expect(body.items).to.be.an(\"array\");",
+              "  pm.expect(body.pagination.page).to.eql(Number(query.page || 1));",
+              "  pm.expect(body.pagination.page_size).to.eql(Number(query.page_size || 50));",
+              "  pm.expect(body.pagination.total).to.be.at.least(0);",
+              "  pm.expect(body.items.length).to.be.at.most(body.pagination.page_size);",
+              "  body.items.forEach(function (alarm) {",
+              "    pm.expect(alarm.event_id).to.match(/^EVT-[0-9]{8}$/);",
+              "    if (query.severity) pm.expect(alarm.severity).to.eql(query.severity);",
+              "    if (query.tag) pm.expect(alarm.tag).to.eql(query.tag.trim().toUpperCase());",
+              "    if (query.start_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.at.least(Date.parse(query.start_time));",
+              "    if (query.end_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.below(Date.parse(query.end_time));",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alarm filters combined",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/alarms?start_time=2026-09-15T05%3A00%3A00Z&end_time=2026-09-16T05%3A00%3A00Z&severity=HIGH&tag=PUMP_01_FLOW&page_size=10",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "alarms"
+          ],
+          "query": [
+            {
+              "key": "start_time",
+              "value": "2026-09-15T05:00:00Z"
+            },
+            {
+              "key": "end_time",
+              "value": "2026-09-16T05:00:00Z"
+            },
+            {
+              "key": "severity",
+              "value": "HIGH"
+            },
+            {
+              "key": "tag",
+              "value": "PUMP_01_FLOW"
+            },
+            {
+              "key": "page_size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Alarm query returns 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Pagination and filters are respected\", function () {",
+              "  const body = pm.response.json();",
+              "  const query = Object.fromEntries(Object.entries(pm.request.url.query.toObject()).map(function (entry) { return [entry[0], decodeURIComponent(String(entry[1]))]; }));",
+              "  pm.expect(body.items).to.be.an(\"array\");",
+              "  pm.expect(body.pagination.page).to.eql(Number(query.page || 1));",
+              "  pm.expect(body.pagination.page_size).to.eql(Number(query.page_size || 50));",
+              "  pm.expect(body.pagination.total).to.be.at.least(0);",
+              "  pm.expect(body.items.length).to.be.at.most(body.pagination.page_size);",
+              "  body.items.forEach(function (alarm) {",
+              "    pm.expect(alarm.event_id).to.match(/^EVT-[0-9]{8}$/);",
+              "    if (query.severity) pm.expect(alarm.severity).to.eql(query.severity);",
+              "    if (query.tag) pm.expect(alarm.tag).to.eql(query.tag.trim().toUpperCase());",
+              "    if (query.start_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.at.least(Date.parse(query.start_time));",
+              "    if (query.end_time) pm.expect(Date.parse(alarm.occurred_at)).to.be.below(Date.parse(query.end_time));",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Top tags - limit 5",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/metrics/top-tags?limit=5",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "metrics",
+            "top-tags"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Metrics return 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Top tags respect the limit and ranking\", function () {",
+              "  const body = pm.response.json();",
+              "  const limit = Number(pm.request.url.query.toObject().limit || 10);",
+              "  pm.expect(body.items).to.be.an(\"array\");",
+              "  pm.expect(body.limit).to.eql(limit);",
+              "  pm.expect(body.items.length).to.be.at.most(limit);",
+              "  body.items.forEach(function (item, index) {",
+              "    pm.expect(item.tag).to.be.a(\"string\");",
+              "    pm.expect(item.event_count).to.be.above(0);",
+              "    if (index > 0) pm.expect(body.items[index - 1].event_count).to.be.at.least(item.event_count);",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Top tags - time and severity",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/metrics/top-tags?start_time=2026-09-15T05%3A00%3A00Z&end_time=2026-09-16T05%3A00%3A00Z&severity=HIGH&limit=5",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "metrics",
+            "top-tags"
+          ],
+          "query": [
+            {
+              "key": "start_time",
+              "value": "2026-09-15T05:00:00Z"
+            },
+            {
+              "key": "end_time",
+              "value": "2026-09-16T05:00:00Z"
+            },
+            {
+              "key": "severity",
+              "value": "HIGH"
+            },
+            {
+              "key": "limit",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Metrics return 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Top tags respect the limit and ranking\", function () {",
+              "  const body = pm.response.json();",
+              "  const limit = Number(pm.request.url.query.toObject().limit || 10);",
+              "  pm.expect(body.items).to.be.an(\"array\");",
+              "  pm.expect(body.limit).to.eql(limit);",
+              "  pm.expect(body.items.length).to.be.at.most(limit);",
+              "  body.items.forEach(function (item, index) {",
+              "    pm.expect(item.tag).to.be.a(\"string\");",
+              "    pm.expect(item.event_count).to.be.above(0);",
+              "    if (index > 0) pm.expect(body.items[index - 1].event_count).to.be.at.least(item.event_count);",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reversed time range",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/alarms?start_time=2026-09-16T00%3A00%3A00Z&end_time=2026-09-15T00%3A00%3A00Z",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "alarms"
+          ],
+          "query": [
+            {
+              "key": "start_time",
+              "value": "2026-09-16T00:00:00Z"
+            },
+            {
+              "key": "end_time",
+              "value": "2026-09-15T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Invalid input returns 422\", function () { pm.response.to.have.status(422); });",
+              "pm.test(\"Validation errors are structured\", function () { pm.expect(pm.response.json().detail).to.be.an(\"array\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invalid page",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/alarms?page=0",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "alarms"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Invalid input returns 422\", function () { pm.response.to.have.status(422); });",
+              "pm.test(\"Validation errors are structured\", function () { pm.expect(pm.response.json().detail).to.be.an(\"array\"); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
