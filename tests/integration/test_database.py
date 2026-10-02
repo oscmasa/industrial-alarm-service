@@ -3,14 +3,12 @@
 import os
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine, insert, inspect, select, text
+from sqlalchemy import insert, inspect, select
 from sqlalchemy.exc import IntegrityError
 
 from alarm_service.infrastructure.database.models import (
@@ -24,28 +22,6 @@ from alarm_service.infrastructure.database.models import (
 
 URL = os.getenv("ALARM_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="ALARM_TEST_DATABASE_URL is required")
-
-
-@pytest.fixture
-def database():
-    schema = f"test_{uuid.uuid4().hex}"
-    admin = create_engine(URL)
-    with admin.begin() as connection:
-        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-    engine = create_engine(
-        URL, connect_args={"options": f"-c search_path={schema} -c timezone=UTC"}
-    )
-    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
-    try:
-        with engine.begin() as connection:
-            config.attributes["connection"] = connection
-            command.upgrade(config, "head")
-        yield engine, config
-    finally:
-        engine.dispose()
-        with admin.begin() as connection:
-            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-        admin.dispose()
 
 
 def populate(connection):

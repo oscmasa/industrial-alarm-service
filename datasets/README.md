@@ -314,6 +314,7 @@ Decimal conversion preserves precision; Pydantic checks the normalized structure
 the versioned catalog validates signal/condition relationships. Domain entities
 remain independent of Pydantic, SQLAlchemy, and FastAPI.
 
-Database models, migrations, generation, and normalization are implemented.
-Batch alarm persistence, reconciled import counters, and repeat-import tests
-remain subsequent stages.
+Database models, migrations, generation, normalization, and atomic batch imports
+are implemented. See the main README for loading the CSV, checking reconciled
+counters, and confirming that a repeated import inserts zero additional alarms.
+The normalization preview remains deliberately independent of deduplication.

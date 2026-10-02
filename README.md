@@ -60,7 +60,7 @@ Application use cases access external integrations through ports.
 ## Project Status
 
 The initial FastAPI service, environment configuration, and Docker Compose setup are implemented.
-The dataset contract, industrial catalog, and reproducible CSV generator are implemented. Row normalization is implemented; database ingestion is pending.
+The dataset contract, industrial catalog, and reproducible CSV generator are implemented. Row normalization is implemented; atomic batch ingestion is implemented.
 
 ## Local Development Setup
 
@@ -107,7 +107,7 @@ python -m ruff format --check .
 python -m pytest
 ```
 
-Database models and the initial migration are implemented. Alarm ingestion and queries are pending.
+Database models and the initial migration are implemented. Alarm ingestion is implemented; query endpoints are pending.
 
 ## Docker Setup
 
@@ -147,6 +147,62 @@ The `postgres_data` named volume persists across container recreation. Changing
 database credentials in `.env` does not change an already initialized database.
 `docker compose down -v` deletes the database volume and should only be used
 when intentionally resetting local data.
+
+## Import Alarm Data
+
+Apply migrations and seed the catalog first (commands below). Rebuild the API
+after code changes. Mount the source directory read-only in a temporary container:
+
+```powershell
+docker compose up --build -d --wait
+docker compose run --rm -v "${PWD}/datasets/raw:/data:ro" api python -m alarm_service.cli --input /data/alarms.csv --batch-size 1000
+```
+
+The first import of the default dataset into a fresh alarm history must report:
+
+- 10,000 records read.
+- 9,500 accepted events, including 167 with warnings.
+- 300 rejected rows and 200 duplicates.
+
+Repeat the same command: it must insert zero new alarms, reject the same 300
+invalid rows, and count 9,700 duplicates. Rejections are retained per import, so
+two executions produce 600 rejection records while the alarm count stays 9,500.
+Existing imports remain available as audit history.
+
+Each import records a UUID, file name/checksum, source system, status, timestamps,
+and counters. `--source-system` defaults to `SCADA_01`; choose the actual export
+source deliberately because event uniqueness is scoped to it. `--batch-size`
+accepts 1-5,000 rows. No generator manifest is consulted.
+
+Processing uses bounded batches and bulk SQL inserts, with one existing-event
+lookup per batch. Equal normalized events are skipped; an existing identifier
+with different event fields is rejected as `DUPLICATE_CONFLICT`. Derived warning
+codes and import metadata do not determine equality. Original events are not
+updated on reimport.
+
+All alarm and rejection batches belong to one transaction. A fatal file/database
+error rolls them back and marks the separately created audit row `FAILED` while
+the database remains reachable. Failed counters retain processed `records_read`
+but zero accepted/rejected/duplicate counts, because nothing was persisted.
+Successful counters reconcile. The file checksum is checked again before commit
+to detect source changes during processing. Abrupt process termination can leave
+a `RUNNING` audit row; automatic recovery is a future extension.
+
+A PostgreSQL transaction-level advisory lock serializes imports for the same
+source (30-second lock timeout). Different sources can proceed independently.
+The database unique constraint remains the final safeguard. A large-file import
+still uses one potentially long transaction; checkpointed imports would need
+an explicit resumability design, rather than silently committing partial files.
+
+Rejected originals containing NUL are stored losslessly as a JSON object with
+`encoding=base64-json-utf8` and a `payload`, because PostgreSQL JSONB cannot hold
+NUL. Other originals retain their normal field mapping.
+
+To inspect the history with the default development credentials:
+
+```powershell
+docker compose exec db psql -U alarm_user -d alarms -c "SELECT status, records_read, accepted, rejected, duplicates, accepted_with_warnings FROM imports ORDER BY started_at; SELECT COUNT(*) AS alarm_count FROM alarms;"
+```
 
 ## Database Schema and Migrations
 
