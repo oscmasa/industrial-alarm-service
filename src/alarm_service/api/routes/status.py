@@ -9,5 +9,5 @@ router = APIRouter(tags=["Status"])
 
 @router.get("/status", response_model=StatusResponse)
 def get_status() -> StatusResponse:
-    """Confirm that the API is running; database readiness is added later."""
+    """Confirm HTTP liveness without querying the database."""
     return StatusResponse()

@@ -1,4 +1,4 @@
-"""Generate reproducible test exports, independently of the future importer."""
+"""Generate reproducible test exports independently of the importer."""
 
 import csv
 import hashlib

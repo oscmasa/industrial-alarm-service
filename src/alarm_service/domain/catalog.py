@@ -1,4 +1,4 @@
-"""Immutable synthetic catalog shared by generation and future validation."""
+"""Immutable synthetic catalog shared by generation and validation."""
 
 from dataclasses import dataclass
 from decimal import Decimal

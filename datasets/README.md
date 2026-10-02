@@ -117,7 +117,7 @@ Reject impossible dates, unsupported formats, date-only strings, and epoch numbe
 Hours must be 00-23 and minutes/seconds 00-59. The source contract excludes
 24:00:00 and leap-second notation, even if a Python parser accepts them.
 The generator's September window is not a restriction on future imported history.
-API time ranges will use an inclusive start and exclusive end.
+API time ranges use an inclusive start and exclusive end.
 
 ### Severity Aliases
 
@@ -156,7 +156,7 @@ internal message whitespace, including line breaks, is retained.
 Acceptance depends on which fields are missing, not their count. Missing tag or
 timestamp invalidates an event; missing both message and value does not.
 
-Stable rejection reasons will cover:
+Stable rejection reasons include:
 
 - `MISSING_REQUIRED_FIELD`
 - `INVALID_EVENT_ID`
@@ -245,7 +245,7 @@ Include isolated activations and repeated episodes with fresh event IDs:
 Keep scenario events inside the operating window. Time associations are synthetic
 patterns, not proof of causality. The API reports counts, not root-cause diagnoses.
 
-## Planned Persistence
+## Persistence
 
 - `equipment`: the seven physical equipment units.
 - `tags`: the twelve signals, their equipment relation, and unit.
@@ -253,7 +253,7 @@ patterns, not proof of causality. The API reports counts, not root-cause diagnos
 - `imports`: source metadata, status, timestamps, and counters.
 - `rejected_records`: original invalid rows and structured reasons.
 
-The allowed alarm conditions will initially be a versioned application catalog
+The allowed alarm conditions are a versioned application catalog
 shared by generation and validation. Plant, line, and SCADA source are fixed context
 for this exercise; adding multiple plants would require explicit source scoping.
 
@@ -284,7 +284,7 @@ Generation overwrites the selected CSV and adjacent manifest. Reproducibility
 applies to the same parameters, generator/catalog version, Python version, and
 timezone data. Rows are grouped by generation category, not sorted by timestamp;
 CSV ordering must not be treated as event chronology. The generator holds its
-rows in memory; production import processing will instead use bounded batches.
+rows in memory; import processing uses bounded batches.
 
 Warnings are not a fifth exclusive outcome. They accompany accepted alarms and
 must be persisted with the event for auditability. Canonical valid records include
@@ -298,7 +298,7 @@ increase the accepted-event warning count.
 python scripts/check_dataset.py --input datasets/raw/alarms.csv
 ```
 
-The preview streams source rows through the same normalizer that the future import
+The preview streams source rows through the same normalizer that the import
 use case will call. It does not write to the database, consult the manifest, or
 perform deduplication. For the default CSV it reports 10,000 read rows, 9,700
 acceptable rows, and 300 rejected rows. After deduplication the import must produce

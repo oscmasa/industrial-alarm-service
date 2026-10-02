@@ -1,393 +1,317 @@
 # Industrial Alarm Service
 
-A Python service for importing, cleaning, normalizing, and querying
-historical industrial alarm data through an API.
+A Python service that cleans and normalizes legacy industrial alarm CSV exports,
+stores accepted events in PostgreSQL, and exposes alarm queries and metrics through FastAPI.
+Rejected records and import executions are retained for traceability.
 
-## Context
+## Industrial Context and Dataset
 
-The dataset represents a fictional water treatment and bottling plant
-with one production line and seven equipment units monitored by a
-single SCADA system.
+The fictional AquaLine water treatment and bottling plant has one production line,
+seven equipment units, twelve tags, and one SCADA source (`SCADA_01`). Tanks, a pump,
+filtration equipment, a filler, a conveyor, and an air compressor belong to the same
+production process. One CSV row represents an alarm activation, not a periodic measurement.
+Acknowledgements, clearances, and alarm durations are outside the scope.
 
-Each record represents an alarm activation.
-The data is synthetic and intentionally includes data quality issues.
+The committed sample covers September 2026, with synthetic operating hours of
+06:00-22:00 in `America/Bogota`. Thresholds, priorities, temporal patterns, and error
+rates are exercise assumptions, not observed plant statistics. UTC conversion can
+place late September 30 events on October 1.
 
-## Dataset Contract
+The CSV fields are `event_id`, `occurred_at`, `tag`, `alarm_code`, `severity`,
+`message`, and `value`. Only message and value are optional. Equipment and units
+come from the catalog rather than being repeated in every event.
 
-See [the dataset contract](datasets/README.md) for the process diagram, equipment
-catalog, field definitions, normalization rules, rejection policy, and generation plan.
+| Generation category | Rows | Purpose |
+| --- | ---: | --- |
+| Canonical valid | 8,500 | Baseline events, including valid events with warnings |
+| Recoverable | 1,000 | Whitespace, aliases, heterogeneous dates/decimals, optional nulls |
+| Invalid | 300 | Missing required fields, invalid dates, identifiers, types or ranges |
+| Exact duplicates | 200 | Verify deduplication and repeat-import behavior |
 
-## Generate Sample Data
+See the [dataset contract](datasets/README.md) for the equipment catalog, field types,
+accepted formats, rejection rules, generation parameters, and process diagram.
+The accompanying manifest describes generator expectations; the importer never
+uses it to decide whether a row is valid.
 
-```powershell
-python -m pip install -e ".[dev]"
-python scripts/generate_dataset.py --rows 10000 --seed 42
-```
+## Quick Start with Docker
 
-Outputs: `datasets/raw/alarms.csv` and `datasets/raw/alarms.manifest.json`.
-The default dataset targets 9,500 accepted events, 300 rejected rows, and 200
-duplicates. The manifest records generation expectations; it does not validate
-an actual import. See the dataset contract for configurable rates and warnings.
-
-## Preview Data Cleaning
-
-```powershell
-python scripts/check_dataset.py --input datasets/raw/alarms.csv
-```
-
-This streams the CSV and reports normalization errors and warnings without
-writing to PostgreSQL. The default CSV yields 9,700 acceptable rows and 300
-rejections. The 200 duplicate rows are still acceptable at this stage;
-deduplication belongs to the next import stage. See the dataset contract for
-numeric precision, field validation, and warning rules.
-
-## Scope
-
-- Reproducible CSV dataset generation.
-- Data cleaning, validation, and normalization.
-- Batch persistence in PostgreSQL.
-- Import history and rejected record tracking.
-- API with filtering, pagination, and aggregated metrics.
-- Reproducible execution using Docker Compose.
-
-## Architecture
-
-The solution separates domain logic, application use cases,
-infrastructure, and the API layer.
-
-Application use cases access external integrations through ports.
-
-## Project Status
-
-The initial FastAPI service, environment configuration, and Docker Compose setup are implemented.
-The dataset contract, industrial catalog, and reproducible CSV generator are implemented. Row normalization is implemented; atomic batch ingestion is implemented.
-
-## Local Development Setup
-
-Python 3.14 is required for the initial project configuration.
-
-From the project root, activate the virtual environment and install the package:
+Requirements: Git and Docker Desktop running in Linux container mode, with Docker
+Compose available. The commands below use PowerShell from the project root.
+Local Python and an `.env` file are not required for this path.
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-```
-
-Verify the package installation:
-
-```powershell
-python -c "import alarm_service; print('Package imported successfully')"
-```
-
-### Run the API
-
-Optionally copy `.env.example` to `.env` to customize the service:
-
-```powershell
-Copy-Item .env.example .env
-python -m uvicorn alarm_service.main:app --reload
-```
-
-- Status endpoint: http://127.0.0.1:8000/status
-- Interactive API documentation: http://127.0.0.1:8000/docs
-- OpenAPI schema: http://127.0.0.1:8000/openapi.json
-
-`GET /status` returns `{"status": "ok"}`. This endpoint checks service
-liveness only; database readiness will be implemented with persistence.
-
-Configuration uses the `ALARM_` environment variable prefix. Environment
-variables take precedence over `.env`. Set `ALARM_DOCS_ENABLED=false` to
-disable Swagger and the OpenAPI endpoint. Keep `.env` out of version control.
-
-### Development Checks
-
-```powershell
-python -m ruff check .
-python -m ruff format --check .
-python -m pytest
-```
-
-Database models and the initial migration are implemented. Alarm ingestion, paginated queries, and top-tag aggregation are implemented.
-
-## Docker Setup
-
-With Docker Desktop running in Linux container mode, start the API and PostgreSQL:
-
-```powershell
+git clone https://github.com/oscmasa/industrial-alarm-service.git
+cd industrial-alarm-service
 docker compose up --build -d --wait
+docker compose exec api python -m alembic upgrade head
+docker compose exec api python -m alarm_service.infrastructure.database.seed
+docker compose run --rm -v "${PWD}/datasets/raw:/data:ro" api python -m alarm_service.cli --input /data/alarms.csv --batch-size 1000
 ```
 
-No local Python installation or `.env` file is required. Optional configuration
-is documented in `.env.example`. The default database credentials are intended
-only for local development.
+If the repository is private, cloning requires an account with access. If you
+already cloned it, start with the Docker command. Stop any local server using
+port 8000 first. Migrations, catalog loading, and imports are explicit operations;
+starting the API alone does not create tables or load events.
 
-The API is available at http://127.0.0.1:8000/status and Swagger at
-http://127.0.0.1:8000/docs. Stop any locally running Uvicorn server first, or
-set `API_PORT=8001` in `.env` to use another port.
+On a fresh database, the default CSV import reports:
 
-Check the services and view their logs:
+```json
+{
+  "status": "COMPLETED",
+  "records_read": 10000,
+  "accepted": 9500,
+  "rejected": 300,
+  "duplicates": 200,
+  "accepted_with_warnings": 167
+}
+```
+
+The actual response also includes a generated import ID, source system, and file
+SHA-256. Repeat the import command to verify idempotency: accepted becomes 0,
+rejected stays 300, duplicates becomes 9,700, and accepted_with_warnings becomes 0.
+The alarm count remains 9,500; each execution retains its own audit and rejection records.
+Migrations and catalog seeding can also be rerun without duplicating catalog entries.
+
+- Interactive API documentation: http://127.0.0.1:8000/docs
+- Alarm listing: http://127.0.0.1:8000/api/alarms?page=1&page_size=10
+- Top tags: http://127.0.0.1:8000/api/metrics/top-tags?limit=5
+- Service status: http://127.0.0.1:8000/status
+
+`GET /status` returns `{"status":"ok"}` and checks HTTP liveness only; it does not
+verify database connectivity or schema readiness.
 
 ```powershell
 docker compose ps
 docker compose logs api db
-```
-
-The API starts after PostgreSQL reports readiness. Its `/status` health check
-verifies HTTP liveness; it does not query the database yet. PostgreSQL runs on
-the internal Compose network and its port is not exposed to the host. The API
-runs as a non-root user, without development auto-reload.
-
-Stop and remove the containers while preserving database data:
-
-```powershell
 docker compose down
 ```
 
-The `postgres_data` named volume persists across container recreation. Changing
-database credentials in `.env` does not change an already initialized database.
-`docker compose down -v` deletes the database volume and should only be used
-when intentionally resetting local data.
+Stopping the services preserves the `postgres_data` volume. `docker compose down -v`
+deletes that database volume; use it only for an intentional local reset.
 
-## Query Alarms
+## API Queries
 
-`GET /api/alarms` lists accepted events only. Filters are optional and combine
-with AND. Defaults: page 1, 50 items per page. Maximum page size: 100; maximum
-page number: 100,000.
+### Alarm Listing
 
-| Parameter | Meaning |
+`GET /api/alarms` returns accepted events ordered by occurrence time descending,
+then internal ID descending. Optional filters combine with AND.
+
+| Parameter | Contract |
 | --- | --- |
-| start_time | Inclusive ISO 8601 instant with Z or explicit UTC offset |
-| end_time | Exclusive ISO 8601 instant with Z or explicit UTC offset |
-| severity | LOW, MEDIUM, HIGH, or CRITICAL; source aliases are not API values |
-| tag | Exact tag, trimmed and normalized to uppercase |
-| page | One-based page number |
-| page_size | Number of items, from 1 to 100 |
-
-Examples in PowerShell:
+| start_time | Inclusive ISO 8601 timestamp with Z or an explicit UTC offset |
+| end_time | Exclusive ISO 8601 timestamp with Z or an explicit UTC offset |
+| severity | LOW, MEDIUM, HIGH, or CRITICAL |
+| tag | Exact identifier, trimmed and normalized to uppercase |
+| page | 1-100,000; default 1 |
+| page_size | 1-100; default 50 |
 
 ```powershell
-Invoke-RestMethod "http://127.0.0.1:8000/api/alarms?page=1&page_size=10"
 Invoke-RestMethod "http://127.0.0.1:8000/api/alarms?severity=HIGH&tag=PUMP_01_FLOW&page_size=10"
-Invoke-RestMethod "http://127.0.0.1:8000/api/alarms?start_time=2026-09-15T00:00:00Z&end_time=2026-09-16T00:00:00Z"
+Invoke-RestMethod "http://127.0.0.1:8000/api/alarms?start_time=2026-09-15T05:00:00Z&end_time=2026-09-16T05:00:00Z"
 ```
 
-Swagger at `/docs` also allows interactive filtering. When constructing URLs
-manually, encode the plus sign in positive offsets as `%2B`; HTTP clients with
-structured query parameters handle this automatically.
+The second example selects September 15 in the plant's UTC-05 timezone. Encode
+positive-offset plus signs as `%2B` when constructing URLs manually.
 
-Responses have `items` and `pagination` containing `page`, `page_size`, `total`,
-and `total_pages`. Items include internal ID, source event ID, source/import
-references, UTC occurrence time, tag, condition, severity, message, value, and
-warning codes. Decimal values are serialized as strings to preserve precision;
-missing optional values are JSON nulls.
+Responses contain `items` and `pagination` (`page`, `page_size`, `total`,
+`total_pages`). Events include their source/import references, UTC timestamp,
+tag, alarm code, severity, message, value, and warning codes. Decimal values are
+JSON strings to preserve precision; missing optional values are JSON nulls.
+No matches return HTTP 200 with an empty list. A valid unknown tag also returns
+no matches. A page beyond the final page retains the matching total.
 
-Events are ordered newest first, then internal ID descending to break timestamp
-ties. No matches return 200 with an empty list and zero totals. A page beyond the
-last page returns an empty list with the actual matching total. A syntactically
-valid but unknown tag returns no matches rather than a validation error.
+### Top Tags
 
-Invalid parameters, unsupported/naive timestamps, unknown query parameters, and
-ranges with start >= end return 422. Database-operation failures return a generic
-503 response without SQL, credentials, or tracebacks. `/status` still indicates
-HTTP liveness only. Read queries use parameter binding, a 10-second statement
-timeout, and a read-only repeatable-read transaction so page items and totals
-share one snapshot. The application reuses an engine connection pool and disposes
-it on shutdown; it does not connect merely to serve `/status`.
-
-Offset pagination is appropriate for this dataset. Separate requests can observe
-newly imported rows and therefore shift page boundaries. Cursor pagination and
-alternative total-count strategies are future options for large histories.
-The SQL adapter implements a read port called by the query use case; the HTTP
-layer handles input/output contracts without embedding SQL.
-
-## Top Alarm Tags
-
-`GET /api/metrics/top-tags` ranks signals by their number of accepted alarm
-activations. It supports `start_time`, `end_time`, and `severity` with the same
-validation and inclusive-start/exclusive-end semantics as `/api/alarms`.
-`limit` defaults to 10 and accepts values from 1 to 100.
+`GET /api/metrics/top-tags` accepts `start_time`, `end_time`, and `severity` with
+the same semantics. `limit` accepts 1-100 and defaults to 10.
 
 ```powershell
-Invoke-RestMethod "http://127.0.0.1:8000/api/metrics/top-tags?limit=5"
-Invoke-RestMethod "http://127.0.0.1:8000/api/metrics/top-tags?severity=HIGH&start_time=2026-09-01T05:00:00Z&end_time=2026-10-01T05:00:00Z&limit=5"
+Invoke-RestMethod "http://127.0.0.1:8000/api/metrics/top-tags?severity=HIGH&limit=5"
 ```
 
-The second example selects September in the plant's UTC-05 timezone.
-The response contains `items` with `tag` and `event_count`, plus the requested
-`limit`. Counts include accepted events with warnings, exclude rejected rows,
-and are not inflated by repeated imports. Counts combine all source systems
-within the fixed plant catalog. Distinct activations with different event IDs
-are counted separately.
+The response contains `items` with `tag` and `event_count`, plus `limit`. Ranking
+uses count descending, then tag ascending for ties. Counts include accepted
+warnings, exclude rejected records, and are not inflated by duplicate imports.
+They combine sources within the fixed plant catalog. An event count does not
+represent alarm duration or establish a root cause.
 
-Ranking uses event count descending, then tag ascending to resolve ties. The
-response can contain fewer items than the limit; no matching events yield an
-empty list with HTTP 200. Invalid filters return 422; database failures return
-the same generic 503 as alarm queries. The aggregation is performed by PostgreSQL
-using GROUP BY, COUNT, ORDER BY, and LIMIT, not by loading the full event history
-into Python. It uses a read-only transaction and a 10-second statement timeout.
-A count is not a duration, failure probability, or root-cause diagnosis.
+### Validation and Errors
 
-## Import Alarm Data
+Invalid ranges (`start_time >= end_time`), timestamps without offsets, unsupported
+query parameters, invalid severity, and out-of-range pagination/limits return
+HTTP 422 with structured validation errors. Database-operation failures return
+a generic HTTP 503 without exposing SQL, credentials, or tracebacks.
 
-Apply migrations and seed the catalog first (commands below). Rebuild the API
-after code changes. Mount the source directory read-only in a temporary container:
+## Cleaning and Import Decisions
 
-```powershell
-docker compose up --build -d --wait
-docker compose run --rm -v "${PWD}/datasets/raw:/data:ro" api python -m alarm_service.cli --input /data/alarms.csv --batch-size 1000
+The CSV adapter streams records through a shared normalizer. Python's standard
+library handles CSV, explicit datetime parsing, and `Decimal` conversion;
+Pydantic validates the normalized structure. Pandas is unnecessary for row-level
+rules and would add a dependency without improving this bounded-memory import.
+
+- Trim fields and recognize explicit null markers; zero remains a valid value.
+- Normalize identifiers and map documented severity aliases.
+- Interpret supported source dates without offsets in `America/Bogota`; store UTC.
+- Accept decimal dots/commas without silently rounding unsupported precision.
+- Validate required fields, catalog relationships, message length, and numeric bounds.
+- Preserve valid historical severity even when it differs from the catalog default.
+- Retain trigger/severity discrepancies as warnings rather than altering historical data.
+
+Acceptance depends on which fields are missing, not the number of missing fields.
+Rejected rows preserve original values and structured reasons instead of being
+silently deleted. Header/file failures abort the import; readable malformed rows
+are rejected individually. The dataset contract lists all rules and error codes.
+
+Imports use bounded batches (default 1,000; allowed 1-5,000), bulk inserts, and one
+existing-event lookup per batch. `(source_system, event_id)` identifies an event:
+identical normalized events are duplicates; conflicting events are rejected as
+`DUPLICATE_CONFLICT`. The first valid occurrence wins and reimports never overwrite it.
+The source defaults to `SCADA_01` and can be specified using `--source-system`.
+
+All event/rejection batches share one transaction. Fatal errors roll back those
+writes; a separately created import audit is marked `FAILED` while the database
+remains reachable. A checksum recheck detects file changes before commit. A
+transaction-level advisory lock serializes imports for the same source, with a
+30-second lock timeout. Completed imports satisfy:
+
+```text
+records_read = accepted + rejected + duplicates
+accepted_with_warnings <= accepted
 ```
 
-The first import of the default dataset into a fresh alarm history must report:
+Rejected originals containing NUL use a lossless base64 JSON wrapper because
+PostgreSQL JSONB cannot store NUL. Other rejected originals retain their field mapping.
 
-- 10,000 records read.
-- 9,500 accepted events, including 167 with warnings.
-- 300 rejected rows and 200 duplicates.
+## Architecture and Database
 
-Repeat the same command: it must insert zero new alarms, reject the same 300
-invalid rows, and count 9,700 duplicates. Rejections are retained per import, so
-two executions produce 600 rejection records while the alarm count stays 9,500.
-Existing imports remain available as audit history.
+The architecture uses domain entities, application use cases and ports, and
+infrastructure/HTTP adapters. This keeps business rules independent of FastAPI
+and SQLAlchemy without adding a large framework for a small assessment.
 
-Each import records a UUID, file name/checksum, source system, status, timestamps,
-and counters. `--source-system` defaults to `SCADA_01`; choose the actual export
-source deliberately because event uniqueness is scoped to it. `--batch-size`
-accepts 1-5,000 rows. No generator manifest is consulted.
+| Location | Responsibility |
+| --- | --- |
+| src/alarm_service/domain | Immutable alarm entities and industrial catalog |
+| src/alarm_service/application | Normalization, import/query use cases, and ports |
+| src/alarm_service/infrastructure | CSV readers, generators, and SQL adapters |
+| src/alarm_service/api | Routes, dependency wiring, and input/output schemas |
+| scripts | Dataset generation and normalization preview |
+| migrations | Versioned Alembic schema changes |
+| tests | Unit and integration coverage |
+| docs/postman | API collection and local environment |
 
-Processing uses bounded batches and bulk SQL inserts, with one existing-event
-lookup per batch. Equal normalized events are skipped; an existing identifier
-with different event fields is rejected as `DUPLICATE_CONFLICT`. Derived warning
-codes and import metadata do not determine equality. Original events are not
-updated on reimport.
-
-All alarm and rejection batches belong to one transaction. A fatal file/database
-error rolls them back and marks the separately created audit row `FAILED` while
-the database remains reachable. Failed counters retain processed `records_read`
-but zero accepted/rejected/duplicate counts, because nothing was persisted.
-Successful counters reconcile. The file checksum is checked again before commit
-to detect source changes during processing. Abrupt process termination can leave
-a `RUNNING` audit row; automatic recovery is a future extension.
-
-A PostgreSQL transaction-level advisory lock serializes imports for the same
-source (30-second lock timeout). Different sources can proceed independently.
-The database unique constraint remains the final safeguard. A large-file import
-still uses one potentially long transaction; checkpointed imports would need
-an explicit resumability design, rather than silently committing partial files.
-
-Rejected originals containing NUL are stored losslessly as a JSON object with
-`encoding=base64-json-utf8` and a `payload`, because PostgreSQL JSONB cannot hold
-NUL. Other originals retain their normal field mapping.
-
-To inspect the history with the default development credentials:
-
-```powershell
-docker compose exec db psql -U alarm_user -d alarms -c "SELECT status, records_read, accepted, rejected, duplicates, accepted_with_warnings FROM imports ORDER BY started_at; SELECT COUNT(*) AS alarm_count FROM alarms;"
-```
-
-## Database Schema and Migrations
-
-The schema uses SQLAlchemy and versioned Alembic migrations. Database creation is
-explicit; the API does not modify the schema on startup.
-
-After rebuilding the containers, apply migrations and load the catalog:
-
-```powershell
-docker compose up --build -d --wait
-docker compose exec api python -m alembic upgrade head
-docker compose exec api python -m alarm_service.infrastructure.database.seed
-docker compose exec api python -m alembic current
-docker compose exec api python -m alembic check
-```
-
-`current` should report `0001_initial (head)`. `check` verifies model/schema
-agreement. Running the seed command again inserts zero additional records.
+PostgreSQL is the relational equivalent chosen for Docker availability, constraints,
+transactional imports, and SQL aggregation. SQLAlchemy supplies database access;
+Alembic tracks explicit schema evolution. FastAPI provides typed validation and
+interactive API documentation.
 
 | Table | Responsibility |
 | --- | --- |
-| equipment | Equipment identifiers and display names |
-| tags | Signal identifiers, equipment references, and units |
-| alarms | Accepted events, source identity, UTC timestamps, values, and warnings |
-| imports | File checksum, execution state, timestamps, and reconciled counters |
-| rejected_records | Original row fields and structured validation errors |
+| equipment | Physical equipment identifiers and names |
+| tags | Signal identifiers, equipment relationships, and units |
+| alarms | Accepted events and historical values/warnings |
+| imports | File metadata, execution state, timestamps, and counters |
+| rejected_records | Original rejected rows and validation errors |
 
-Alarm uniqueness is enforced by `(source_system, event_id)`. Historical records
-are protected by foreign keys with restricted deletion. Composite indexes on
-`(occurred_at, id)`, `(severity, occurred_at, id)`, and `(tag_id, occurred_at, id)`
-support time filters and stable pagination. Extra indexes cover import and
-equipment references. Index effectiveness must be checked against actual queries
-as the API is implemented.
+Equipment/tag separation avoids repeating catalog attributes in every event.
+Audit tables keep import metadata and rejected rows outside the queried alarm
+history. Alembic also maintains its own `alembic_version` table.
 
-Timestamps use PostgreSQL `TIMESTAMPTZ`; connections use UTC. Sensor values use
-`NUMERIC(18, 6)` to avoid binary floating-point rounding. Future normalization
-must reject unsupported precision/size instead of silently rounding. PostgreSQL
-constraints reject negative/NaN values and invalid severities; catalog-dependent
-bounds and tag/condition compatibility remain application validation rules.
-Warnings are JSON arrays stored alongside accepted events. Rejection errors are
-nonempty JSON arrays. Completed import counters must satisfy
-`records_read = accepted + rejected + duplicates`, with warning counts no greater
-than accepted counts.
+Foreign keys restrict deletion of referenced history. A unique constraint enforces
+source-event identity. Composite indexes on `(occurred_at, id)`,
+`(severity, occurred_at, id)`, and `(tag_id, occurred_at, id)` support common filters
+and ordering; their effectiveness should be measured for production workloads.
+Timestamps use `TIMESTAMPTZ` and values use `NUMERIC(18, 6)`.
 
-The five business tables are accompanied by Alembic's `alembic_version` table.
-The catalog seed inserts missing entries without overwriting existing data;
-future catalog changes require explicit versioned updates.
+Aggregation runs in SQL rather than loading history into Python. Paginated reads
+use one read-only repeatable-read snapshot for both rows and totals. Queries use
+bound parameters, a connection pool, and a 10-second statement timeout.
 
-### Connection Configuration
+## Local Development and Dataset Generation
 
-Inside Compose, the database hostname is `db`. `ALARM_DATABASE_URL` must match the
-`POSTGRES_*` settings; credentials with special characters must be URL-encoded.
-The connection string is excluded from settings representations using `SecretStr`.
-A local host process needs a reachable PostgreSQL instance and a URL containing
-`localhost`; the Compose database port remains private by default.
+Python 3.14 is required. From the project root:
 
-### PostgreSQL Integration Tests
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+python scripts/generate_dataset.py --rows 10000 --seed 42
+python scripts/check_dataset.py --input datasets/raw/alarms.csv
+```
 
-The tests require `ALARM_TEST_DATABASE_URL`. Without it, database integration tests
-are skipped; an offline migration SQL test still runs. Integration tests create
-and remove a unique temporary schema, leaving the business tables untouched. Run
-against a development/test database with permission to create schemas.
+The generator overwrites `datasets/raw/alarms.csv` and its adjacent manifest.
+Seed 42 and the default parameters reproduce the sample within the same
+Python/timezone-data and generator versions. Generation holds rows in memory;
+the importer streams bounded batches.
 
-To run all tests inside a temporary API container, from PowerShell:
+The preview does not write to PostgreSQL or deduplicate. It reports 9,700 acceptable
+rows and 300 rejected rows; deduplication during import reduces accepted events
+to 9,500. See the dataset contract for custom periods, rates, and output paths.
+
+To run Uvicorn locally, supply `ALARM_DATABASE_URL` for a reachable PostgreSQL
+instance, apply migrations, seed the catalog, then run:
+
+```powershell
+python -m alembic upgrade head
+python -m alarm_service.infrastructure.database.seed
+python -m uvicorn alarm_service.main:app --reload
+```
+
+The Compose database is not exposed on a host port, so its `db` hostname works
+only inside Compose. Local execution needs its own reachable database or an
+explicit host-port configuration.
+
+## Tests and Postman
+
+```powershell
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest --basetemp=.pytest_tmp -p no:cacheprovider
+```
+
+Without `ALARM_TEST_DATABASE_URL`, PostgreSQL integration tests are skipped.
+To include them using the running Compose database and default local credentials:
 
 ```powershell
 docker compose run --rm -v "${PWD}/tests:/app/tests:ro" -e ALARM_TEST_DATABASE_URL=postgresql+psycopg://alarm_user:local_dev_password@db:5432/alarms api sh -c "python -m pip install --user pytest httpx && python -m pytest /app/tests -p no:cacheprovider"
 ```
 
-If credentials were customized, replace the test URL accordingly. This installs
-test tools only in the temporary container. Checks cover migration reversal,
-model/schema agreement, source-event uniqueness, foreign keys, UTC timestamps,
-import counter constraints, rejection structure, and repeat catalog loading.
+If credentials change, update the test URL. Tests create and remove isolated
+schemas; the database user must have permission to create schemas. Coverage
+includes invalid source data, UTC conversion, precision, duplicate conflicts,
+transaction rollback, repeat imports, migrations, pagination, filters, and exact
+aggregation results. The previous full PostgreSQL run passed 147 tests. After adding
+18 direct use-case checks, the local run passed 149 tests with 16 PostgreSQL tests
+skipped; run the Docker command above to verify all 165 tests with a database.
 
-## Project Structure
+Import these files into Postman:
 
-- `src/alarm_service/domain`: business entities and rules.
-- `src/alarm_service/application`: use cases, ports, and normalization.
-- `src/alarm_service/infrastructure`: database and file adapters.
-- `src/alarm_service/api`: HTTP routes and request/response schemas.
-- `scripts`: synthetic dataset generation.
-- `datasets/raw`: representative source files.
-- `tests/unit`: domain and normalization tests.
-- `tests/integration`: database and API tests.
-- `docs`: architecture and API usage documentation.
+- `docs/postman/industrial-alarms.postman_collection.json`
+- `docs/postman/local.postman_environment.json`
 
-## Postman Endpoint Checks
+Select **Industrial Alarm Service - Local**, confirm `base_url`, and use
+**Run collection** after loading the dataset. The collection contains 10 requests
+and 20 checks covering status, listing, individual/combined filters, top tags,
+and invalid input (422). The Postman Runner execution passed all 20 checks.
 
-Import the collection and local environment from `docs/postman`, then select
-**Industrial Alarm Service - Local**. Its `base_url` defaults to
-`http://127.0.0.1:8000`. Start Docker and import the dataset before execution.
+## Configuration and Operational Limits
 
-Use **Run collection** to execute 10 read-only requests with 20 concise tests:
+Copy `.env.example` to `.env` only when customizing Compose settings. Settings use
+the `ALARM_` prefix; environment variables override `.env`. Changing database
+credentials requires matching `ALARM_DATABASE_URL`, and does not change credentials
+in an already initialized PostgreSQL volume. URL-encode special characters in passwords.
+Set `API_PORT` to change the host port, or `ALARM_DOCS_ENABLED=false` to disable
+Swagger/OpenAPI. `.env` and generated environment/build files are ignored by Git.
 
-1. Service status.
-2. Paginated alarm listing.
-3. Time filter.
-4. Severity filter.
-5. Tag filter.
-6. Combined filters.
-7. Top tags.
-8. Top tags with time and severity filters.
-9. Invalid time range (422).
-10. Invalid page number (422).
+The API binds to host loopback, runs as a non-root container user, and exposes no
+database host port. Default credentials are for local development. Authentication,
+authorization, TLS, and rate limiting remain necessary before exposing it beyond
+this local assessment setup.
 
-Tests check HTTP status, response structure, pagination, alarm filter semantics,
-and ranking limits. The pytest suite covers the remaining edge cases and exact
-aggregation results. Capture the actual Postman Runner summary as submission
-evidence; a collection file alone does not demonstrate a Postman execution.
+CSV is the implemented source adapter; JSON is a possible extension. The plant
+catalog is fixed and versioned in code. A frontend and file-upload endpoint are
+not implemented. Offset pagination suits the sample; cursor pagination and
+alternative counting strategies are options for larger histories. Imports are
+atomic but can create long transactions; resumable checkpoints require an
+explicit design. Abrupt termination can leave an audit in `RUNNING`.
+Docker provides a repeatable setup, while image tags and dependency ranges are
+not an exact dependency lock.
