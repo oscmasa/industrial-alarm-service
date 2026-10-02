@@ -29,6 +29,18 @@ The default dataset targets 9,500 accepted events, 300 rejected rows, and 200
 duplicates. The manifest records generation expectations; it does not validate
 an actual import. See the dataset contract for configurable rates and warnings.
 
+## Preview Data Cleaning
+
+```powershell
+python scripts/check_dataset.py --input datasets/raw/alarms.csv
+```
+
+This streams the CSV and reports normalization errors and warnings without
+writing to PostgreSQL. The default CSV yields 9,700 acceptable rows and 300
+rejections. The 200 duplicate rows are still acceptable at this stage;
+deduplication belongs to the next import stage. See the dataset contract for
+numeric precision, field validation, and warning rules.
+
 ## Scope
 
 - Reproducible CSV dataset generation.
@@ -48,7 +60,7 @@ Application use cases access external integrations through ports.
 ## Project Status
 
 The initial FastAPI service, environment configuration, and Docker Compose setup are implemented.
-The dataset contract, industrial catalog, and reproducible CSV generator are implemented. Ingestion is pending.
+The dataset contract, industrial catalog, and reproducible CSV generator are implemented. Row normalization is implemented; database ingestion is pending.
 
 ## Local Development Setup
 

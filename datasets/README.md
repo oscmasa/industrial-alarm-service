@@ -107,13 +107,15 @@ timezone. Store and return timezone-aware UTC instants.
 Supported representations:
 
 - ISO 8601: `2026-09-15T14:32:10-05:00`, `2026-09-15T19:32:10Z`,
-  or `2026-09-15T14:32:10` (optional fractional seconds).
+  or `2026-09-15T14:32:10` (optional fractional seconds, one to six digits).
 - Year-first local datetime: `2026-09-15 14:32:10`.
 - Day-first local datetime: `15/09/2026 14:32:10`.
 
 The slash format is explicitly day-first because of the source contract:
 `01/02/2026 08:00:00` means February 1. There is no month-first fallback.
 Reject impossible dates, unsupported formats, date-only strings, and epoch numbers.
+Hours must be 00-23 and minutes/seconds 00-59. The source contract excludes
+24:00:00 and leap-second notation, even if a Python parser accepts them.
 The generator's September window is not a restriction on future imported history.
 API time ranges will use an inclusive start and exclusive end.
 
@@ -144,6 +146,10 @@ trigger is accepted with a VALUE_TRIGGER_MISMATCH warning: the captured value
 may differ from the measurement at the activation instant.
 Missing values are allowed because a SCADA event may omit the captured measurement.
 Missing messages are also allowed. Do not invent either field or truncate messages.
+Values must fit NUMERIC(18, 6): less than 10^12 and at most six significant fractional
+digits (trailing zeros are ignored). Unsupported precision is rejected, not rounded.
+NUL characters are rejected because PostgreSQL text/JSON cannot store them. Other
+internal message whitespace, including line breaks, is retained.
 
 ## Rejections and Duplicates
 
@@ -160,6 +166,10 @@ Stable rejection reasons will cover:
 - `INVALID_TAG_ALARM_COMBINATION`
 - `UNKNOWN_SEVERITY`
 - `INVALID_VALUE`
+- `INVALID_VALUE_PRECISION`
+- `INVALID_FIELD_TYPE`
+- `INVALID_TEXT_CHARACTER`
+- `INVALID_NORMALIZED_FIELD`
 - `VALUE_OUT_OF_RANGE`
 - `MESSAGE_TOO_LONG`
 - `MALFORMED_ROW`
@@ -282,5 +292,28 @@ both VALUE_TRIGGER_MISMATCH and SEVERITY_DIFFERS_FROM_DEFAULT examples. Optional
 missing fields do not themselves create warnings. Duplicate warning counts do not
 increase the accepted-event warning count.
 
-The generator and catalog are implemented. Normalization, database persistence,
-reconciled import counters, and repeat-import tests remain subsequent stages.
+## Normalization Preview
+
+```powershell
+python scripts/check_dataset.py --input datasets/raw/alarms.csv
+```
+
+The preview streams source rows through the same normalizer that the future import
+use case will call. It does not write to the database, consult the manifest, or
+perform deduplication. For the default CSV it reports 10,000 read rows, 9,700
+acceptable rows, and 300 rejected rows. After deduplication the import must produce
+9,500 accepted events and 200 duplicates.
+
+There are 172 acceptable rows with warnings, including five copied warning events.
+After deduplication, 167 unique accepted events have warnings. Error-code counts
+may exceed rejected-row counts because a row can contain several independent errors.
+
+The normalizer returns the original fields, structured errors/warnings, and either
+a typed immutable alarm or no alarm. Datetime parsing uses explicit formats;
+Decimal conversion preserves precision; Pydantic checks the normalized structure;
+the versioned catalog validates signal/condition relationships. Domain entities
+remain independent of Pydantic, SQLAlchemy, and FastAPI.
+
+Database models, migrations, generation, and normalization are implemented.
+Batch alarm persistence, reconciled import counters, and repeat-import tests
+remain subsequent stages.
