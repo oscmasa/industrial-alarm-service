@@ -95,7 +95,7 @@ python -m ruff format --check .
 python -m pytest
 ```
 
-Database migrations and alarm queries are not implemented yet.
+Database models and the initial migration are implemented. Alarm ingestion and queries are pending.
 
 ## Docker Setup
 
@@ -135,6 +135,79 @@ The `postgres_data` named volume persists across container recreation. Changing
 database credentials in `.env` does not change an already initialized database.
 `docker compose down -v` deletes the database volume and should only be used
 when intentionally resetting local data.
+
+## Database Schema and Migrations
+
+The schema uses SQLAlchemy and versioned Alembic migrations. Database creation is
+explicit; the API does not modify the schema on startup.
+
+After rebuilding the containers, apply migrations and load the catalog:
+
+```powershell
+docker compose up --build -d --wait
+docker compose exec api python -m alembic upgrade head
+docker compose exec api python -m alarm_service.infrastructure.database.seed
+docker compose exec api python -m alembic current
+docker compose exec api python -m alembic check
+```
+
+`current` should report `0001_initial (head)`. `check` verifies model/schema
+agreement. Running the seed command again inserts zero additional records.
+
+| Table | Responsibility |
+| --- | --- |
+| equipment | Equipment identifiers and display names |
+| tags | Signal identifiers, equipment references, and units |
+| alarms | Accepted events, source identity, UTC timestamps, values, and warnings |
+| imports | File checksum, execution state, timestamps, and reconciled counters |
+| rejected_records | Original row fields and structured validation errors |
+
+Alarm uniqueness is enforced by `(source_system, event_id)`. Historical records
+are protected by foreign keys with restricted deletion. Composite indexes on
+`(occurred_at, id)`, `(severity, occurred_at, id)`, and `(tag_id, occurred_at, id)`
+support time filters and stable pagination. Extra indexes cover import and
+equipment references. Index effectiveness must be checked against actual queries
+as the API is implemented.
+
+Timestamps use PostgreSQL `TIMESTAMPTZ`; connections use UTC. Sensor values use
+`NUMERIC(18, 6)` to avoid binary floating-point rounding. Future normalization
+must reject unsupported precision/size instead of silently rounding. PostgreSQL
+constraints reject negative/NaN values and invalid severities; catalog-dependent
+bounds and tag/condition compatibility remain application validation rules.
+Warnings are JSON arrays stored alongside accepted events. Rejection errors are
+nonempty JSON arrays. Completed import counters must satisfy
+`records_read = accepted + rejected + duplicates`, with warning counts no greater
+than accepted counts.
+
+The five business tables are accompanied by Alembic's `alembic_version` table.
+The catalog seed inserts missing entries without overwriting existing data;
+future catalog changes require explicit versioned updates.
+
+### Connection Configuration
+
+Inside Compose, the database hostname is `db`. `ALARM_DATABASE_URL` must match the
+`POSTGRES_*` settings; credentials with special characters must be URL-encoded.
+The connection string is excluded from settings representations using `SecretStr`.
+A local host process needs a reachable PostgreSQL instance and a URL containing
+`localhost`; the Compose database port remains private by default.
+
+### PostgreSQL Integration Tests
+
+The tests require `ALARM_TEST_DATABASE_URL`. Without it, database integration tests
+are skipped; an offline migration SQL test still runs. Integration tests create
+and remove a unique temporary schema, leaving the business tables untouched. Run
+against a development/test database with permission to create schemas.
+
+To run all tests inside a temporary API container, from PowerShell:
+
+```powershell
+docker compose run --rm -v "${PWD}/tests:/app/tests:ro" -e ALARM_TEST_DATABASE_URL=postgresql+psycopg://alarm_user:local_dev_password@db:5432/alarms api sh -c "python -m pip install --user pytest httpx && python -m pytest /app/tests -p no:cacheprovider"
+```
+
+If credentials were customized, replace the test URL accordingly. This installs
+test tools only in the temporary container. Checks cover migration reversal,
+model/schema agreement, source-event uniqueness, foreign keys, UTC timestamps,
+import counter constraints, rejection structure, and repeat catalog loading.
 
 ## Project Structure
 

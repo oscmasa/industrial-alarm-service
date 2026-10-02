@@ -7,6 +7,7 @@ services:
     environment:
       ALARM_APP_NAME: ${ALARM_APP_NAME:-Industrial Alarm Service}
       ALARM_DOCS_ENABLED: ${ALARM_DOCS_ENABLED:-true}
+      ALARM_DATABASE_URL: ${ALARM_DATABASE_URL:-postgresql+psycopg://alarm_user:local_dev_password@db:5432/alarms}
     depends_on:
       db:
         condition: service_healthy
