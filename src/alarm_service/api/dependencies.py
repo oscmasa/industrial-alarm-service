@@ -1,0 +1,10 @@
+"""HTTP composition dependencies; database engines belong to app lifespan."""
+
+from fastapi import Request
+
+from alarm_service.application.ports.alarm_query import AlarmQueryStore
+from alarm_service.infrastructure.database.alarm_query import PostgresAlarmQuery
+
+
+def get_alarm_query_store(request: Request) -> AlarmQueryStore:
+    return PostgresAlarmQuery(request.app.state.database_engine)

@@ -107,7 +107,7 @@ python -m ruff format --check .
 python -m pytest
 ```
 
-Database models and the initial migration are implemented. Alarm ingestion is implemented; query endpoints are pending.
+Database models and the initial migration are implemented. Alarm ingestion and paginated queries are implemented; aggregated metrics are pending.
 
 ## Docker Setup
 
@@ -147,6 +147,58 @@ The `postgres_data` named volume persists across container recreation. Changing
 database credentials in `.env` does not change an already initialized database.
 `docker compose down -v` deletes the database volume and should only be used
 when intentionally resetting local data.
+
+## Query Alarms
+
+`GET /api/alarms` lists accepted events only. Filters are optional and combine
+with AND. Defaults: page 1, 50 items per page. Maximum page size: 100; maximum
+page number: 100,000.
+
+| Parameter | Meaning |
+| --- | --- |
+| start_time | Inclusive ISO 8601 instant with Z or explicit UTC offset |
+| end_time | Exclusive ISO 8601 instant with Z or explicit UTC offset |
+| severity | LOW, MEDIUM, HIGH, or CRITICAL; source aliases are not API values |
+| tag | Exact tag, trimmed and normalized to uppercase |
+| page | One-based page number |
+| page_size | Number of items, from 1 to 100 |
+
+Examples in PowerShell:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/alarms?page=1&page_size=10"
+Invoke-RestMethod "http://127.0.0.1:8000/api/alarms?severity=HIGH&tag=PUMP_01_FLOW&page_size=10"
+Invoke-RestMethod "http://127.0.0.1:8000/api/alarms?start_time=2026-09-15T00:00:00Z&end_time=2026-09-16T00:00:00Z"
+```
+
+Swagger at `/docs` also allows interactive filtering. When constructing URLs
+manually, encode the plus sign in positive offsets as `%2B`; HTTP clients with
+structured query parameters handle this automatically.
+
+Responses have `items` and `pagination` containing `page`, `page_size`, `total`,
+and `total_pages`. Items include internal ID, source event ID, source/import
+references, UTC occurrence time, tag, condition, severity, message, value, and
+warning codes. Decimal values are serialized as strings to preserve precision;
+missing optional values are JSON nulls.
+
+Events are ordered newest first, then internal ID descending to break timestamp
+ties. No matches return 200 with an empty list and zero totals. A page beyond the
+last page returns an empty list with the actual matching total. A syntactically
+valid but unknown tag returns no matches rather than a validation error.
+
+Invalid parameters, unsupported/naive timestamps, unknown query parameters, and
+ranges with start >= end return 422. Database-operation failures return a generic
+503 response without SQL, credentials, or tracebacks. `/status` still indicates
+HTTP liveness only. Read queries use parameter binding, a 10-second statement
+timeout, and a read-only repeatable-read transaction so page items and totals
+share one snapshot. The application reuses an engine connection pool and disposes
+it on shutdown; it does not connect merely to serve `/status`.
+
+Offset pagination is appropriate for this dataset. Separate requests can observe
+newly imported rows and therefore shift page boundaries. Cursor pagination and
+alternative total-count strategies are future options for large histories.
+The SQL adapter implements a read port called by the query use case; the HTTP
+layer handles input/output contracts without embedding SQL.
 
 ## Import Alarm Data
 
