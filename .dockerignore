@@ -21,3 +21,6 @@ tests
 docs
 datasets
 *.log
+
+# Frontend is separate from the API build context
+frontend

@@ -293,6 +293,34 @@ Select **Industrial Alarm Service - Local**, confirm `base_url`, and use
 and 20 checks covering status, listing, individual/combined filters, top tags,
 and invalid input (422). The Postman Runner execution passed all 20 checks.
 
+## Frontend Setup
+
+The frontend is an independent React/TypeScript package in `frontend`.
+This stage configures the toolchain and a minimal entry screen only; it does
+not yet provide alarm queries, visualizations, or a Compose service.
+
+Use Node.js 22.12+ within the Node 22 release line, or Node.js 24+.
+From the repository root:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open http://127.0.0.1:5173. Stop the development server with Ctrl+C.
+For static checks and production compilation:
+
+```powershell
+npm run lint
+npm run build
+npm run preview
+```
+
+The production preview runs at http://127.0.0.1:4173. TypeScript uses strict
+checking. `package-lock.json` is committed; `node_modules` and `dist` are generated
+and ignored. The other scaffold files remain empty until their implementation step.
+
 ## Configuration and Operational Limits
 
 Copy `.env.example` to `.env` only when customizing Compose settings. Settings use
@@ -308,8 +336,9 @@ authorization, TLS, and rate limiting remain necessary before exposing it beyond
 this local assessment setup.
 
 CSV is the implemented source adapter; JSON is a possible extension. The plant
-catalog is fixed and versioned in code. A frontend and file-upload endpoint are
-not implemented. Offset pagination suits the sample; cursor pagination and
+catalog is fixed and versioned in code. The frontend toolchain is configured, but
+its alarm features are not implemented. File uploads are outside the current scope.
+Offset pagination suits the sample; cursor pagination and
 alternative counting strategies are options for larger histories. Imports are
 atomic but can create long transactions; resumable checkpoints require an
 explicit design. Abrupt termination can leave an audit in `RUNNING`.

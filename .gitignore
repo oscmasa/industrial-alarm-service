@@ -29,3 +29,6 @@ htmlcov/
 *.log
 *~
 .pytest_tmp/
+# Frontend dependencies and build metadata
+node_modules/
+*.tsbuildinfo
