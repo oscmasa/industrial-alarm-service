@@ -107,7 +107,7 @@ python -m ruff format --check .
 python -m pytest
 ```
 
-Database models and the initial migration are implemented. Alarm ingestion and paginated queries are implemented; aggregated metrics are pending.
+Database models and the initial migration are implemented. Alarm ingestion, paginated queries, and top-tag aggregation are implemented.
 
 ## Docker Setup
 
@@ -199,6 +199,33 @@ newly imported rows and therefore shift page boundaries. Cursor pagination and
 alternative total-count strategies are future options for large histories.
 The SQL adapter implements a read port called by the query use case; the HTTP
 layer handles input/output contracts without embedding SQL.
+
+## Top Alarm Tags
+
+`GET /api/metrics/top-tags` ranks signals by their number of accepted alarm
+activations. It supports `start_time`, `end_time`, and `severity` with the same
+validation and inclusive-start/exclusive-end semantics as `/api/alarms`.
+`limit` defaults to 10 and accepts values from 1 to 100.
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/metrics/top-tags?limit=5"
+Invoke-RestMethod "http://127.0.0.1:8000/api/metrics/top-tags?severity=HIGH&start_time=2026-09-01T05:00:00Z&end_time=2026-10-01T05:00:00Z&limit=5"
+```
+
+The second example selects September in the plant's UTC-05 timezone.
+The response contains `items` with `tag` and `event_count`, plus the requested
+`limit`. Counts include accepted events with warnings, exclude rejected rows,
+and are not inflated by repeated imports. Counts combine all source systems
+within the fixed plant catalog. Distinct activations with different event IDs
+are counted separately.
+
+Ranking uses event count descending, then tag ascending to resolve ties. The
+response can contain fewer items than the limit; no matching events yield an
+empty list with HTTP 200. Invalid filters return 422; database failures return
+the same generic 503 as alarm queries. The aggregation is performed by PostgreSQL
+using GROUP BY, COUNT, ORDER BY, and LIMIT, not by loading the full event history
+into Python. It uses a read-only transaction and a 10-second statement timeout.
+A count is not a duration, failure probability, or root-cause diagnosis.
 
 ## Import Alarm Data
 

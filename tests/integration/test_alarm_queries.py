@@ -100,6 +100,5 @@ def test_single_filters(alarm_client):
         ({"end_time": "2026-09-15T01:00:00Z"}, 2),
     ):
         assert (
-            alarm_client.get("/api/alarms", params=params).json()["pagination"]["total"]
-            == expected
+            alarm_client.get("/api/alarms", params=params).json()["pagination"]["total"] == expected
         )

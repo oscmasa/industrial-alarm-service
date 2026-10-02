@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from alarm_service.api.routes.alarms import router as alarms_router
+from alarm_service.api.routes.metrics import router as metrics_router
 from alarm_service.api.routes.status import router as status_router
 from alarm_service.config import Settings, get_settings
 from alarm_service.infrastructure.database.session import build_engine
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     application.include_router(alarms_router)
+    application.include_router(metrics_router)
     application.include_router(status_router)
     return application
 
