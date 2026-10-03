@@ -300,7 +300,7 @@ The frontend is an independent React/TypeScript package in `frontend`.
 Docker Compose builds the frontend and serves its compiled files through Nginx
 at http://127.0.0.1:8080. The dashboard lists real alarms, with 20 events per
 page, previous/next navigation, and loading, empty, and retryable error states.
-Time, severity, and exact-tag filters are available. Charts are not implemented yet. Local Node.js is unnecessary
+Time, severity, and exact-tag filters are available, together with top-tag metrics. Local Node.js is unnecessary
 when using Docker.
 
 Use Node.js 22.12+ within the Node 22 release line, or Node.js 24+.
@@ -352,6 +352,25 @@ These dates produce a UTC range of September 15 at 05:00 to September 16 at 05:0
 The committed sample contains 39 matching events. No matches show an explicit
 empty state; clearing restores the complete alarm history.
 
+### Top-Tag Visualization
+
+The dashboard requests `/api/metrics/top-tags?limit=5` and renders up to five
+horizontal bars, with exact event counts and text labels. Ranking and aggregation
+come from PostgreSQL through the API, not from the current table page. Bar lengths
+are proportional to the largest returned count; ties retain the API's tag order.
+The graphic uses HTML/CSS with accessible list labels, without a chart dependency.
+
+Applied time and severity filters update the chart. The tag filter affects only
+the alarm list because the metrics endpoint compares tags and does not accept a
+tag filter. This distinction is visible above the chart. Page navigation does
+not refetch metrics. Chart loading, errors/retry, and empty results are independent
+of the table; obsolete requests are cancelled when its filters change.
+
+Counts include accepted events with warnings and exclude rejected/duplicate rows.
+They describe activation frequency, not severity scores, duration, or root causes.
+`npm test` covers client requests, filter forwarding, cancellation, empty responses,
+bar scaling, and failure handling, together with the existing list/filter tests.
+
 ### Frontend Container and API Proxy
 
 From the repository root, `docker compose up --build -d --wait` starts the frontend,
@@ -361,7 +380,7 @@ and the compiled files, and runs as an unprivileged user on container port 8080.
 The frontend build context is `frontend`, separate from the Python image.
 
 Nginx forwards `/api/` and `/status` to `api:8000`, preserving paths and query
-parameters. Future browser calls can use relative URLs without cross-origin
+parameters. Browser calls use relative URLs without cross-origin
 configuration. Docker DNS is refreshed so API container recreation does not leave
 a stale upstream address. Unknown API paths retain the API's error response;
 only frontend routes fall back to `index.html`. Fingerprinted assets are cached,
@@ -397,7 +416,7 @@ this local assessment setup.
 
 CSV is the implemented source adapter; JSON is a possible extension. The plant
 catalog is fixed and versioned in code. The frontend implements listing and
-pagination and filters; charts remain pending. File uploads are outside the current scope.
+pagination, filters, and top-tag visualization. File uploads are outside the current scope.
 Offset pagination suits the sample; cursor pagination and
 alternative counting strategies are options for larger histories. Imports are
 atomic but can create long transactions; resumable checkpoints require an

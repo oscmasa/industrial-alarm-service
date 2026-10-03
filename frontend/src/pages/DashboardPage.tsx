@@ -5,6 +5,7 @@ import { AlarmFilters } from '../components/AlarmFilters'
 import { AlarmPagination } from '../components/AlarmPagination'
 import { AlarmTable } from '../components/AlarmTable'
 import { DashboardHeader } from '../components/DashboardHeader'
+import { TopTagsPanel } from '../components/TopTagsPanel'
 
 const PAGE_SIZE = 20
 
@@ -50,6 +51,9 @@ export function DashboardPage() {
     setRetry((value) => value + 1)
   }
 
+  // Reset metric state only when its own filters change, not on tag or page changes.
+  const metricsKey = JSON.stringify([filters.start_time, filters.end_time, filters.severity])
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to alarm history</a>
@@ -61,6 +65,7 @@ export function DashboardPage() {
           <p className="page-description">Historical activations across the water treatment and bottling line.</p>
         </div>
         <AlarmFilters appliedFilters={filters} onApply={applyFilters} />
+        <TopTagsPanel key={metricsKey} filters={filters} />
         <section className="alarm-panel" aria-labelledby="records-title" aria-busy={state.status === 'loading'}>
           <div className="panel-heading">
             <h2 id="records-title">Recorded alarms</h2>

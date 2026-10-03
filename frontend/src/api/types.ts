@@ -32,3 +32,15 @@ export interface AlarmQueryFilters {
   severity?: Severity
   tag?: string
 }
+
+export type TopTagFilters = Pick<AlarmQueryFilters, 'start_time' | 'end_time' | 'severity'>
+
+export interface TagCount {
+  tag: string
+  event_count: number
+}
+
+export interface TopTags {
+  items: TagCount[]
+  limit: number
+}
