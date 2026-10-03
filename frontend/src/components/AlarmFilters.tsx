@@ -47,10 +47,9 @@ export function AlarmFilters({ appliedFilters, onApply }: {
 
   return (
     <section className="filter-panel" aria-labelledby="filters-title">
-      <div className="filter-heading">
-        <h2 id="filters-title">Filter alarms</h2>
-        <p id="time-help">Dates use plant time (America/Bogota, UTC-05). Start is included; end is excluded.</p>
-      </div>
+      <details className="filter-disclosure">
+      <summary id="filters-title">Filters <span className="filter-count">{Object.keys(appliedFilters).length > 0 ? `${Object.keys(appliedFilters).length} applied` : 'Optional'}</span></summary>
+      <p id="time-help" className="filter-help">Use Bogotá time (UTC−05:00). Results include the start time and exclude the end time.</p>
       <form onSubmit={apply}>
         <div className="filter-fields">
           <div className="filter-field">
@@ -95,7 +94,8 @@ export function AlarmFilters({ appliedFilters, onApply }: {
         </div>
         {Object.values(errors).some(Boolean) && <p className="field-error" role="alert">Review the highlighted filters before applying.</p>}
       </form>
-      <p className="filter-summary" role="status">{summary ? `Applied: ${summary}` : 'Showing all alarms.'}</p>
+      </details>
+      <p className="filter-summary" role="status">{summary ? `Applied: ${summary}` : 'All recorded alarms · No filters applied'}</p>
     </section>
   )
 }

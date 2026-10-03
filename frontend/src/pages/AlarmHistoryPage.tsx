@@ -60,7 +60,7 @@ export function AlarmHistoryPage() {
         <section className="alarm-panel" aria-labelledby="records-title" aria-busy={state.status === 'loading'}>
           <div className="panel-heading">
             <h2 id="records-title">Recorded alarms</h2>
-            <span>Plant time · America/Bogota (UTC-05)</span>
+            <span>Newest events first · Bogotá time (UTC−05:00)</span>
           </div>
           <div role="status" className="visually-hidden">
             {state.status === 'success' ? `Page ${state.data.pagination.page} loaded, ${state.data.items.length} events shown.` : ''}

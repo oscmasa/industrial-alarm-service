@@ -346,6 +346,12 @@ Table dates use America/Bogota (UTC-05); hover over a date to see its UTC source
 
 ### Dashboard Filters
 
+History filters are collapsed by default. Expand **Filters** to edit the range,
+severity or tag; the applied summary remains visible when collapsed. Table dates
+show a full calendar date and a separate 24-hour time in Bogotá (UTC−05:00).
+Expand **View message** for the recorded message and the warning count for
+normalization warnings. The presentation does not change captured values.
+
 Use **Apply filters** to submit an optional start/end time, severity, and exact tag.
 Editing a field alone does not change the active query. **Clear filters** resets
 both the form and applied filters. Applying or clearing returns to page 1; page

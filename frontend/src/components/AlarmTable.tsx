@@ -3,7 +3,11 @@ import { formatMeasuredValue } from './measuredValue'
 
 const dateFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'America/Bogota',
-  year: 'numeric', month: 'short', day: '2-digit',
+  year: 'numeric', month: 'long', day: '2-digit',
+})
+
+const timeFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/Bogota',
   hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
 })
 
@@ -25,7 +29,7 @@ export function AlarmTable({ alarms }: { alarms: Alarm[] }) {
         </caption>
         <thead>
           <tr>
-            <th scope="col">Occurred at <span className="column-note">UTC-05</span></th>
+            <th scope="col">Occurred at <span className="column-note">Bogotá · UTC−05:00</span></th>
             <th scope="col">Tag / event</th>
             <th scope="col">Condition</th>
             <th scope="col">Severity</th>
@@ -40,12 +44,16 @@ export function AlarmTable({ alarms }: { alarms: Alarm[] }) {
               <td className="date-cell">
                 <time dateTime={alarm.occurred_at} title={`UTC: ${alarm.occurred_at}`}>
                   {dateFormatter.format(new Date(alarm.occurred_at))}
+                  <span className="record-time">{timeFormatter.format(new Date(alarm.occurred_at))}</span>
                 </time>
               </td>
               <td><span className="tag-name">{alarm.tag}</span><span className="event-id">{alarm.event_id}</span></td>
               <td>{alarm.alarm_code.replaceAll('_', ' ')}</td>
               <td><span className={`severity severity-${alarm.severity.toLowerCase()}`}>{severityLabels[alarm.severity]}</span></td>
-              <td className="message-cell">{alarm.message ?? <span className="muted">Not recorded</span>}</td>
+              <td className="message-cell"><details className="message-details">
+                <summary>View message</summary>
+                <p>{alarm.message ?? <span className="muted">Not recorded</span>}</p>
+              </details></td>
               <td className="value-cell">
                 {alarm.value === null ? <span className="muted">Not available</span>
                   : formatMeasuredValue(alarm.value, alarm.unit)}

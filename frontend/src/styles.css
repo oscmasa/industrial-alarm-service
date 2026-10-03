@@ -42,7 +42,10 @@ tbody tr:hover { background: #f7fbff; }
 .date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tag-name { display: block; font-weight: 600; white-space: nowrap; }
 .event-id { display: block; margin-top: 4px; font-size: .75rem; color: #506982; }
-.message-cell { min-width: 160px; max-width: 300px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.message-cell { min-width: 120px; max-width: 240px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.message-details summary { cursor: pointer; color: #2463a5; white-space: nowrap; }
+.message-details p { margin: 10px 0 0; }
+.record-time { display: block; margin-top: 4px; color: #506982; font-size: .8125rem; }
 .value-cell { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .muted { color: #506982; }
 .severity { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: .75rem; font-weight: 600; }
@@ -68,7 +71,10 @@ tbody tr:hover { background: #f7fbff; }
   .pagination-controls button { padding: 8px 12px; }
 }
 
-.filter-panel { margin-top: 28px; padding: 24px; background: #fff; border: 1px solid #c5d9ed; border-radius: 12px; }
+.filter-panel { margin-top: 24px; padding: 16px 20px; background: #fff; border: 1px solid #c5d9ed; border-radius: 10px; }
+.filter-disclosure > summary { cursor: pointer; color: #183350; font-size: .875rem; font-weight: 600; }
+.filter-count { margin-left: 10px; font-weight: 400; font-size: .75rem; color: #506982; }
+.filter-help { margin: 16px 0 20px; color: #506982; font-size: .8125rem; line-height: 1.6; }
 .filter-heading h2 { margin: 0 0 8px; font-size: 1.1rem; }
 .filter-heading p { margin: 0 0 20px; color: #506982; font-size: .8125rem; line-height: 1.6; }
 .filter-fields { display: grid; grid-template-columns: 1fr 1fr .8fr 1fr; gap: 18px; }
