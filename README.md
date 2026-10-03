@@ -300,7 +300,7 @@ The frontend is an independent React/TypeScript package in `frontend`.
 Docker Compose builds the frontend and serves its compiled files through Nginx
 at http://127.0.0.1:8080. The dashboard lists real alarms, with 20 events per
 page, previous/next navigation, and loading, empty, and retryable error states.
-Filters and charts are not implemented yet. Local Node.js is unnecessary
+Time, severity, and exact-tag filters are available. Charts are not implemented yet. Local Node.js is unnecessary
 when using Docker.
 
 Use Node.js 22.12+ within the Node 22 release line, or Node.js 24+.
@@ -329,6 +329,28 @@ requests are cancelled and ignored. Tests use the built-in Node.js test runner,
 without adding a test framework dependency. Values remain decimal strings, missing
 fields are labelled as not recorded, and warning details can be expanded.
 Table dates use America/Bogota (UTC-05); hover over a date to see its UTC source.
+
+### Dashboard Filters
+
+Use **Apply filters** to submit an optional start/end time, severity, and exact tag.
+Editing a field alone does not change the active query. **Clear filters** resets
+both the form and applied filters. Applying or clearing returns to page 1; page
+navigation retains the active filters. The applied summary identifies the query
+currently used by the table, even while the form is being edited.
+
+Datetime inputs use the plant's UTC-05 clock, explicitly converted to UTC before
+sending. The browser's local timezone is not used. This fixed offset matches the
+September 2026 scenario; historical daylight-saving periods are outside the UI's
+fixed-offset convention. Start is inclusive and end exclusive. An inverted/equal
+range, unsupported date, or malformed tag is rejected before requesting data.
+Tag values are trimmed and uppercased. Valid unknown tags return no matches.
+The API remains the authoritative validator and its 422 errors have a safe UI message.
+
+For a combined example, enter September 15, 2026 at 00:00 as the start and
+September 16 at 00:00 as the end, select High, and enter `PUMP_01_FLOW`.
+These dates produce a UTC range of September 15 at 05:00 to September 16 at 05:00.
+The committed sample contains 39 matching events. No matches show an explicit
+empty state; clearing restores the complete alarm history.
 
 ### Frontend Container and API Proxy
 
@@ -375,7 +397,7 @@ this local assessment setup.
 
 CSV is the implemented source adapter; JSON is a possible extension. The plant
 catalog is fixed and versioned in code. The frontend implements listing and
-pagination; filters and charts remain pending. File uploads are outside the current scope.
+pagination and filters; charts remain pending. File uploads are outside the current scope.
 Offset pagination suits the sample; cursor pagination and
 alternative counting strategies are options for larger histories. Imports are
 atomic but can create long transactions; resumable checkpoints require an

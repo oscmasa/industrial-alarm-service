@@ -25,3 +25,10 @@ export interface AlarmList {
   items: Alarm[]
   pagination: Pagination
 }
+
+export interface AlarmQueryFilters {
+  start_time?: string
+  end_time?: string
+  severity?: Severity
+  tag?: string
+}

@@ -63,3 +63,19 @@ tbody tr:hover { background: #fafcfc; }
   .pagination-controls { width: 100%; justify-content: space-between; gap: 8px; }
   .pagination-controls button { padding: 8px 12px; }
 }
+
+.filter-panel { margin-top: 28px; padding: 24px; background: #fff; border: 1px solid #dde5e7; border-radius: 12px; }
+.filter-heading h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.filter-heading p { margin: 0 0 20px; color: #52676e; font-size: .8125rem; line-height: 1.6; }
+.filter-fields { display: grid; grid-template-columns: 1fr 1fr .8fr 1fr; gap: 18px; }
+.filter-field label { display: block; margin-bottom: 8px; font-size: .8125rem; font-weight: 600; }
+.filter-field input, .filter-field select { width: 100%; min-width: 0; font: inherit; font-size: .875rem; padding: 10px; border: 1px solid #bacbce; border-radius: 6px; background: #fff; color: #192e35; }
+.filter-field [aria-invalid="true"] { border-color: #9b1d34; }
+.field-error { display: block; color: #9b1d34; font-size: .8125rem; margin-top: 6px; line-height: 1.5; }
+.filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
+.filter-actions span { color: #52676e; font-size: .8125rem; }
+button.primary-button { background: #0b7278; border-color: #0b7278; color: #fff; }
+button.primary-button:hover { background: #085d62; color: #fff; }
+.filter-summary { margin: 18px 0 0; color: #455d65; font-size: .8125rem; line-height: 1.6; }
+@media (max-width: 1000px) { .filter-fields { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .filter-panel { padding: 16px; } .filter-fields { grid-template-columns: 1fr; } }
