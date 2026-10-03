@@ -5,7 +5,7 @@ from sqlalchemy.engine import Engine
 
 from alarm_service.application.ports.alarm_query import AlarmPage, AlarmQuery, AlarmRecord
 from alarm_service.domain.alarm import Alarm, Severity
-from alarm_service.infrastructure.database.models import AlarmModel
+from alarm_service.infrastructure.database.models import AlarmModel, TagModel
 
 
 class PostgresAlarmQuery:
@@ -25,7 +25,8 @@ class PostgresAlarmQuery:
             conditions.append(table.c.tag_id == query.tag)
         count_query = select(func.count()).select_from(table).where(*conditions)
         rows_query = (
-            select(table)
+            select(table, TagModel.unit)
+            .join(TagModel, table.c.tag_id == TagModel.id)
             .where(*conditions)
             .order_by(table.c.occurred_at.desc(), table.c.id.desc())
             .offset((query.page - 1) * query.page_size)
@@ -56,6 +57,7 @@ class PostgresAlarmQuery:
                     row["value"],
                     tuple(row["warnings"]),
                 ),
+                unit=row["unit"],
             )
             for row in rows
         ]

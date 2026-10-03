@@ -31,6 +31,7 @@ class AlarmItem(BaseModel):
     severity: Severity
     message: str | None
     value: Decimal | None
+    unit: str | None = None
     warnings: list[str]
 
 

@@ -24,6 +24,7 @@ def list_alarms(
                 id=record.id,
                 source_system=record.source_system,
                 import_id=record.import_id,
+                unit=record.unit,
                 **{key: value for key, value in vars(record.alarm).items()},
             )
             for record in page.items

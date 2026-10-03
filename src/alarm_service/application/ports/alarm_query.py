@@ -24,6 +24,7 @@ class AlarmRecord:
     source_system: str
     import_id: uuid.UUID
     alarm: Alarm
+    unit: str | None = None
 
 
 @dataclass(frozen=True)

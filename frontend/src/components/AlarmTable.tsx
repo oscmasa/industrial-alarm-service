@@ -1,4 +1,5 @@
 import type { Alarm, Severity } from '../api/types'
+import { formatMeasuredValue } from './measuredValue'
 
 const dateFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'America/Bogota',
@@ -29,7 +30,7 @@ export function AlarmTable({ alarms }: { alarms: Alarm[] }) {
             <th scope="col">Condition</th>
             <th scope="col">Severity</th>
             <th scope="col">Message</th>
-            <th scope="col">Captured value</th>
+            <th scope="col">Measured value</th>
             <th scope="col">Warnings</th>
           </tr>
         </thead>
@@ -45,7 +46,10 @@ export function AlarmTable({ alarms }: { alarms: Alarm[] }) {
               <td>{alarm.alarm_code.replaceAll('_', ' ')}</td>
               <td><span className={`severity severity-${alarm.severity.toLowerCase()}`}>{severityLabels[alarm.severity]}</span></td>
               <td className="message-cell">{alarm.message ?? <span className="muted">Not recorded</span>}</td>
-              <td className="value-cell">{alarm.value ?? <span className="muted">Not recorded</span>}</td>
+              <td className="value-cell">
+                {alarm.value === null ? <span className="muted">Not available</span>
+                  : formatMeasuredValue(alarm.value, alarm.unit)}
+              </td>
               <td>{alarm.warnings.length > 0 ? (
                 <details className="warning-details">
                   <summary>{alarm.warnings.length} warning{alarm.warnings.length === 1 ? '' : 's'}</summary>

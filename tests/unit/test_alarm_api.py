@@ -30,7 +30,8 @@ class FakeStore:
             ("VALUE_TRIGGER_MISMATCH",),
         )
         return AlarmPage(
-            [AlarmRecord(1, "SCADA_01", uuid.UUID(int=1), alarm)], 123, query.page, query.page_size
+            [AlarmRecord(1, "SCADA_01", uuid.UUID(int=1), alarm, unit="L/min")],
+            123, query.page, query.page_size
         )
 
 
@@ -50,6 +51,7 @@ def test_response_precision_and_pagination(api):
     body = response.json()
     assert body["pagination"] == {"page": 1, "page_size": 50, "total": 123, "total_pages": 3}
     assert body["items"][0]["value"] == "12.500001"
+    assert body["items"][0]["unit"] == "L/min"
     assert body["items"][0]["occurred_at"].endswith("Z")
     assert body["items"][0]["warnings"] == ["VALUE_TRIGGER_MISMATCH"]
     assert len(store.queries) == 1

@@ -118,6 +118,14 @@ Responses contain `items` and `pagination` (`page`, `page_size`, `total`,
 `total_pages`). Events include their source/import references, UTC timestamp,
 tag, alarm code, severity, message, value, and warning codes. Decimal values are
 JSON strings to preserve precision; missing optional values are JSON nulls.
+Each alarm also exposes `unit` from the persisted tag catalog: `L/min`, `bar`,
+`%`, `degC`, or `boolean`. This metadata does not change the captured reading.
+The dashboard removes only trailing fractional zeros without converting readings
+to JavaScript numbers or rounding them (for example, `6.610000` becomes
+`6.61 L/min`). It displays `degC` as `°C`, binary values as `1 — Active` or
+`0 — Inactive`, and missing readings as `Not available`. Missing unit metadata
+is explicitly marked as `unit not specified`; no unit is inferred from a value.
+CSV files, stored readings, and their six-decimal database precision are unchanged.
 No matches return HTTP 200 with an empty list. A valid unknown tag also returns
 no matches. A page beyond the final page retains the matching total.
 

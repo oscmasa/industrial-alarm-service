@@ -67,6 +67,8 @@ def test_combined_filters_and_time_boundaries(alarm_client):
     body = response.json()
     assert body["pagination"]["total"] == 2
     assert [row["event_id"] for row in body["items"]] == ["EVT-00000003", "EVT-00000001"]
+    assert all(row["unit"] == "L/min" for row in body["items"])
+    assert all(row["value"] == "12.500000" for row in body["items"])
 
 
 def test_pagination_has_stable_tie_breaking(alarm_client):
@@ -102,3 +104,12 @@ def test_single_filters(alarm_client):
         assert (
             alarm_client.get("/api/alarms", params=params).json()["pagination"]["total"] == expected
         )
+
+
+def test_tag_catalog_units_are_exposed_without_changing_values(alarm_client):
+    items = alarm_client.get("/api/alarms").json()["items"]
+    assert {row["tag"]: row["unit"] for row in items} == {
+        "PUMP_01_FLOW": "L/min",
+        "TANK_IN_01_LEVEL": "%",
+    }
+    assert all(row["value"] == "12.500000" for row in items)

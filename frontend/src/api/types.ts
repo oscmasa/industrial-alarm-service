@@ -11,6 +11,7 @@ export interface Alarm {
   severity: Severity
   message: string | null
   value: string | null
+  unit: string | null
   warnings: string[]
 }
 
