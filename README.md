@@ -503,3 +503,40 @@ atomic but can create long transactions; resumable checkpoints require an
 explicit design. Abrupt termination can leave an audit in `RUNNING`.
 Docker provides a repeatable setup, while image tags and dependency ranges are
 not an exact dependency lock.
+
+
+### Data Quality API
+
+`GET /api/imports?page=1&page_size=20` lists audit executions, newest first
+(`started_at DESC, id DESC`). Each item includes source, file name, checksum,
+status, start/finish timestamps and the five persisted counters. Executions of the
+same file remain separate: a repeated load can have zero accepted records and many
+duplicates. Accepted-with-warning records are a subset of accepted records, not an
+additional outcome. Counters belong to each execution; do not sum repeated imports
+as unique events. Pending/running/failed executions may have incomplete counters.
+Internal operational exception details are deliberately excluded.
+
+`GET /api/imports/{import_id}/rejections?page=1&page_size=20` returns rejected
+records in source-record order, with their original JSON values, issue fields,
+codes and messages, and audit timestamp. Optional `error_code=INVALID_NUMBER`
+filters records containing that exact issue code (trimmed and uppercased).
+A record with multiple issues is counted once; all its issues remain in the
+response. Unknown valid codes return an empty page. `record_number` is the
+one-based CSV data-record number, excluding the header, rather than a guaranteed
+physical line number when quoted fields contain newlines. Raw source values remain
+unchanged; JSON formatting does not reproduce the original CSV bytes.
+
+Both endpoints return `items` and `pagination` (`page`, `page_size`, `total`,
+`total_pages`); rejection responses also identify `import_id`. Page size defaults
+to 20 and is capped at 100; pages are limited to 1-100000. Malformed input or
+unknown query parameters return 422. An unknown import UUID returns 404, while an
+existing import without rejections returns 200 with an empty list. A database
+failure returns a safe 503. Read-only repeatable-read transactions keep counts and
+items consistent, with a 10-second statement timeout. Existing import-date and
+unique `(import_id, record_number)` indexes support ordering and import isolation.
+No extra table, migration, or data modification is needed. Original records and
+checksums are audit data; restrict access if this assessment is deployed beyond
+the local demonstration environment.
+
+The Data quality frontend remains a placeholder until its separate integration
+phase; these endpoints can already be exercised through `/docs`.
