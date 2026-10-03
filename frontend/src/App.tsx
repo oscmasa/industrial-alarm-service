@@ -1,5 +1,5 @@
-import { DashboardPage } from './pages/DashboardPage'
+import { DashboardLayout } from './pages/DashboardLayout'
 
 export default function App() {
-  return <DashboardPage />
+  return <DashboardLayout />
 }

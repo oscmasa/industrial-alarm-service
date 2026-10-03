@@ -4,8 +4,6 @@ import type { AlarmList, AlarmQueryFilters } from '../api/types'
 import { AlarmFilters } from '../components/AlarmFilters'
 import { AlarmPagination } from '../components/AlarmPagination'
 import { AlarmTable } from '../components/AlarmTable'
-import { DashboardHeader } from '../components/DashboardHeader'
-import { TopTagsPanel } from '../components/TopTagsPanel'
 
 const PAGE_SIZE = 20
 
@@ -14,7 +12,7 @@ type LoadState =
   | { status: 'success'; data: AlarmList }
   | { status: 'error'; message: string }
 
-export function DashboardPage() {
+export function AlarmHistoryPage() {
   const [filters, setFilters] = useState<AlarmQueryFilters>({})
   const [page, setPage] = useState(1)
   const [retry, setRetry] = useState(0)
@@ -51,21 +49,14 @@ export function DashboardPage() {
     setRetry((value) => value + 1)
   }
 
-  // Reset metric state only when its own filters change, not on tag or page changes.
-  const metricsKey = JSON.stringify([filters.start_time, filters.end_time, filters.severity])
-
   return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">Skip to alarm history</a>
-      <DashboardHeader />
-      <main id="main-content" className="dashboard-main">
+    <>
         <div className="page-heading">
-          <p className="eyebrow">Production line overview</p>
+          <p className="eyebrow">Historical SCADA events</p>
           <h1>Alarm history</h1>
           <p className="page-description">Historical activations across the water treatment and bottling line.</p>
         </div>
         <AlarmFilters appliedFilters={filters} onApply={applyFilters} />
-        <TopTagsPanel key={metricsKey} filters={filters} />
         <section className="alarm-panel" aria-labelledby="records-title" aria-busy={state.status === 'loading'}>
           <div className="panel-heading">
             <h2 id="records-title">Recorded alarms</h2>
@@ -94,7 +85,6 @@ export function DashboardPage() {
           )}
         </section>
         <footer className="dashboard-footer">AquaLine · Historical SCADA events · 20 events per page</footer>
-      </main>
-    </div>
+    </>
   )
 }

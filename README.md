@@ -305,6 +305,12 @@ and invalid input (422). The Postman Runner execution passed all 20 checks.
 ## Frontend Setup
 
 The frontend is an independent React/TypeScript package in `frontend`.
+The shared layout provides **Overview**, **Alarm history**, and **Data quality**
+navigation. Switching views preserves the history filters and current page.
+Overview currently shows the existing top-tag aggregation across all accepted
+events. Daily trends, available date ranges, and comparisons will be connected in
+the analytics phase. Data quality currently contains the view structure; import
+queries will be connected in its own phase. No mock counts are displayed.
 Docker Compose builds the frontend and serves its compiled files through Nginx
 at http://127.0.0.1:8080. The dashboard lists real alarms, with 20 events per
 page, previous/next navigation, and loading, empty, and retryable error states.

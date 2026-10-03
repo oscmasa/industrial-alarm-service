@@ -40,7 +40,9 @@ export function TopTagsPanel({ filters }: { filters: TopTagFilters }) {
         <span>Up to 5 tags · Accepted events</span>
       </div>
       <p className="metrics-context">
-        Uses the applied time and severity filters. The tag filter applies only to the alarm list.
+        {startTime || endTime || severity
+          ? 'Uses the selected time and severity filters.'
+          : 'Counts all accepted historical events across the available dataset.'}
       </p>
       {state.status === 'loading' && <p className="panel-state" role="status">Loading top-tag metrics…</p>}
       {state.status === 'error' && (
