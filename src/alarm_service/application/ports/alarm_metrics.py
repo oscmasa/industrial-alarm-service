@@ -13,6 +13,8 @@ class TopTagsQuery:
     end_time: datetime | None = None
     severity: Severity | None = None
     limit: int = 10
+    tag: str | None = None
+    alarm_code: str | None = None
 
 
 @dataclass(frozen=True)

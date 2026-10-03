@@ -20,6 +20,10 @@ class PostgresAlarmMetrics:
             conditions.append(table.c.occurred_at < query.end_time)
         if query.severity is not None:
             conditions.append(table.c.severity == query.severity.value)
+        if query.tag is not None:
+            conditions.append(table.c.tag_id == query.tag)
+        if query.alarm_code is not None:
+            conditions.append(table.c.alarm_code == query.alarm_code)
         count = func.count().label("event_count")
         statement = (
             select(table.c.tag_id.label("tag"), count)

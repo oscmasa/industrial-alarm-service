@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import insert
 
-from alarm_service.api.dependencies import get_alarm_query_store
+from alarm_service.api.dependencies import get_alarm_query_store, get_overview_store
 from alarm_service.config import Settings
 from alarm_service.infrastructure.database.alarm_query import PostgresAlarmQuery
 from alarm_service.infrastructure.database.models import AlarmModel, ImportModel
+from alarm_service.infrastructure.database.overview import PostgresOverview
 from alarm_service.infrastructure.database.seed import seed_catalog
 from alarm_service.main import create_app
 
@@ -49,6 +50,7 @@ def alarm_client(database):
         )
     app = create_app(Settings(_env_file=None))
     app.dependency_overrides[get_alarm_query_store] = lambda: PostgresAlarmQuery(engine)
+    app.dependency_overrides[get_overview_store] = lambda: PostgresOverview(engine)
     with TestClient(app) as client:
         yield client
 
@@ -113,3 +115,55 @@ def test_tag_catalog_units_are_exposed_without_changing_values(alarm_client):
         "TANK_IN_01_LEVEL": "%",
     }
     assert all(row["value"] == "12.500000" for row in items)
+
+
+def test_overview_groups_by_bogota_day_and_filters_severity(alarm_client):
+    params = {"start_time": "2026-09-14T05:00:00Z",
+              "end_time": "2026-09-16T05:00:00Z"}
+    body = alarm_client.get("/api/metrics/overview", params=params).json()
+    assert body["total_events"] == 5
+    assert [row["event_count"] for row in body["daily"]] == [5, 0]
+    assert body["severity_counts"]["HIGH"] == 4
+    filtered = alarm_client.get("/api/metrics/overview", params={**params, "severity": "LOW"})
+    assert filtered.json()["total_events"] == 1
+    assert filtered.json()["daily"][0]["date"] == "2026-09-14"
+    dates = alarm_client.get("/api/metrics/available-dates").json()
+    assert dates["first_event"] == "2026-09-15T00:00:00Z"
+    assert dates["last_event"] == "2026-09-15T02:00:00Z"
+    next_day = alarm_client.get("/api/metrics/overview", params={
+        "start_time": "2026-09-15T05:00:00Z",
+        "end_time": "2026-09-16T05:00:00Z",
+    }).json()
+    assert next_day["total_events"] == 0
+    assert next_day["daily"][0]["moving_average_7_days"] is None
+
+
+def test_overview_empty_database(database):
+    engine, _ = database
+    app = create_app(Settings(_env_file=None))
+    app.dependency_overrides[get_overview_store] = lambda: PostgresOverview(engine)
+    with TestClient(app) as client:
+        dates = client.get("/api/metrics/available-dates").json()
+        assert dates["first_event"] is None and dates["last_event"] is None
+        result = client.get("/api/metrics/overview", params={
+            "start_time": "2026-09-01T05:00:00Z",
+            "end_time": "2026-10-01T05:00:00Z",
+        })
+        assert result.status_code == 200
+        body = result.json()
+        assert body["total_events"] == 0 and len(body["daily"]) == 30
+        assert body["comparison"]["event_count"] is None
+
+
+def test_overview_tag_and_condition_filters(alarm_client):
+    params = {"start_time": "2026-09-14T05:00:00Z",
+              "end_time": "2026-09-16T05:00:00Z", "tag": "PUMP_01_FLOW",
+              "alarm_code": "LOW_FLOW", "severity": "HIGH"}
+    result = alarm_client.get("/api/metrics/overview", params=params).json()
+    assert result["total_events"] == 3
+    assert result["daily"][0]["event_count"] == 3
+    incompatible = alarm_client.get("/api/metrics/overview", params={
+        **params, "alarm_code": "LOW_LEVEL",
+    }).json()
+    assert incompatible["total_events"] == 0
+    assert all(row["event_count"] == 0 for row in incompatible["daily"])

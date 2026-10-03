@@ -71,7 +71,8 @@ def test_combined_filters(api):
         {"start_time": "2026-09-16T00:00:00Z", "end_time": "2026-09-15T00:00:00Z"},
         {"start_time": "2026-09-15T00:00:00Z", "end_time": "2026-09-15T00:00:00Z"},
         {"page": 2},
-        {"tag": "PUMP_01_FLOW"},
+        {"tag": "PUMP FLOW"},
+        {"alarm_code": ""},
     ],
 )
 def test_invalid_metrics_parameters(api, params):
@@ -100,4 +101,16 @@ def test_metrics_openapi_parameters(api):
         "end_time",
         "severity",
         "limit",
+        "tag",
+        "alarm_code",
     }
+
+
+def test_metrics_tag_and_condition_filters_are_normalized(api):
+    client, store = api
+    response = client.get("/api/metrics/top-tags", params={
+        "tag": " pump_01_flow ", "alarm_code": " low_flow ",
+    })
+    assert response.status_code == 200
+    assert store.queries[0].tag == "PUMP_01_FLOW"
+    assert store.queries[0].alarm_code == "LOW_FLOW"

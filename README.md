@@ -131,7 +131,8 @@ no matches. A page beyond the final page retains the matching total.
 
 ### Top Tags
 
-`GET /api/metrics/top-tags` accepts `start_time`, `end_time`, and `severity` with
+`GET /api/metrics/top-tags` accepts `start_time`, `end_time`, `severity`, `tag`,
+and `alarm_code` with
 the same semantics. `limit` accepts 1-100 and defaults to 10.
 
 ```powershell
@@ -344,7 +345,57 @@ without adding a test framework dependency. Values remain decimal strings, missi
 fields are labelled as not recorded, and warning details can be expanded.
 Table dates use America/Bogota (UTC-05); hover over a date to see its UTC source.
 
-### Dashboard Filters
+### Overview Metrics API
+
+`GET /api/catalog/tags` exposes the fixed configured catalog version, equipment
+names, units and compatible `alarm_types` for each tag. The frontend can restrict
+alarm-type choices after selecting a tag and reset an incompatible selection.
+Catalog choices are independent of events available in a selected period;
+severity remains independent of each condition's default severity.
+
+Both `/api/metrics/overview` and `/api/metrics/top-tags` accept optional `tag` and
+`alarm_code` filters, trimmed and uppercased. Filters combine with time and
+severity using AND and apply consistently to all aggregates, trailing averages
+and previous-period comparisons. Unknown identifiers or incompatible combinations
+return empty metrics; malformed identifiers return 422. Global available event
+dates remain independent of these filters.
+
+`GET /api/metrics/available-dates` returns the first and last accepted event
+timestamps plus `America/Bogota`. An empty database returns null bounds. These
+dates describe observed events, not guaranteed continuous monitoring coverage.
+
+`GET /api/metrics/overview` requires `start_time` and `end_time` with explicit
+timezone offsets, at midnight in Bogotá. The start is included and the end is
+excluded; ranges are limited to 366 days. Optional `severity` applies to current
+counts, the previous period and the moving average alike. For September:
+
+```text
+/api/metrics/overview?start_time=2026-09-01T00:00:00-05:00&end_time=2026-10-01T00:00:00-05:00
+```
+
+The response includes total events, all four severity counts, daily counts and
+a seven-day trailing average including the selected day. The first six days may
+use earlier events outside the selected range. An average is null when its
+seven-day window extends outside observed event dates. Daily zero counts mean
+no stored events, not proof that a machine was operating without alarms.
+
+Comparison uses the immediately preceding interval of equal duration (a 30-day
+selection compares against the preceding 30 days, not necessarily a calendar
+month). Both intervals must lie within observed event dates. Otherwise the
+baseline and percentage are null with `outside_observed_dates`. A zero baseline
+returns a null percentage with `zero_baseline`. A nonzero baseline uses
+`(current - previous) / previous * 100`. Averages and percentages are JSON decimal
+strings rounded to two decimals; captured readings are never rounded or updated.
+Date availability does not establish completeness of either period.
+
+All aggregates use accepted unique events, including events with warnings.
+PostgreSQL groups by local day and severity within indexed timestamp bounds;
+Python processes only the bounded aggregate rows. Counts and date bounds share
+a read-only repeatable-read snapshot with a ten-second statement timeout.
+These endpoints prepare the next frontend phase; the current UI has not yet
+connected its timeline or month selection.
+
+### History Filter Interaction
 
 History filters are collapsed by default. Expand **Filters** to edit the range,
 severity or tag; the applied summary remains visible when collapsed. Table dates
@@ -380,11 +431,10 @@ come from PostgreSQL through the API, not from the current table page. Bar lengt
 are proportional to the largest returned count; ties retain the API's tag order.
 The graphic uses HTML/CSS with accessible list labels, without a chart dependency.
 
-Applied time and severity filters update the chart. The tag filter affects only
-the alarm list because the metrics endpoint compares tags and does not accept a
-tag filter. This distinction is visible above the chart. Page navigation does
-not refetch metrics. Chart loading, errors/retry, and empty results are independent
-of the table; obsolete requests are cancelled when its filters change.
+Overview currently shows an unfiltered top-tag chart, separate from history
+filters and pagination. The API supports time, severity, tag and alarm-type
+filters; the next frontend phase will connect its own Overview controls to them.
+Chart loading, errors/retry and empty results are independent of the table.
 
 Counts include accepted events with warnings and exclude rejected/duplicate rows.
 They describe activation frequency, not severity scores, duration, or root causes.
