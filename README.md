@@ -72,6 +72,7 @@ rejected stays 300, duplicates becomes 9,700, and accepted_with_warnings becomes
 The alarm count remains 9,500; each execution retains its own audit and rejection records.
 Migrations and catalog seeding can also be rerun without duplicating catalog entries.
 
+- Frontend: http://127.0.0.1:8080 (minimal entry screen at this stage)
 - Interactive API documentation: http://127.0.0.1:8000/docs
 - Alarm listing: http://127.0.0.1:8000/api/alarms?page=1&page_size=10
 - Top tags: http://127.0.0.1:8000/api/metrics/top-tags?limit=5
@@ -82,7 +83,7 @@ verify database connectivity or schema readiness.
 
 ```powershell
 docker compose ps
-docker compose logs api db
+docker compose logs frontend api db
 docker compose down
 ```
 
@@ -296,8 +297,10 @@ and invalid input (422). The Postman Runner execution passed all 20 checks.
 ## Frontend Setup
 
 The frontend is an independent React/TypeScript package in `frontend`.
-This stage configures the toolchain and a minimal entry screen only; it does
-not yet provide alarm queries, visualizations, or a Compose service.
+Docker Compose builds the frontend and serves its compiled files through Nginx
+at http://127.0.0.1:8080. The screen is still minimal: alarm listing, filters,
+and charts will be implemented in later steps. Local Node.js is unnecessary
+when using Docker.
 
 Use Node.js 22.12+ within the Node 22 release line, or Node.js 24+.
 From the repository root:
@@ -321,13 +324,41 @@ The production preview runs at http://127.0.0.1:4173. TypeScript uses strict
 checking. `package-lock.json` is committed; `node_modules` and `dist` are generated
 and ignored. The other scaffold files remain empty until their implementation step.
 
+### Frontend Container and API Proxy
+
+From the repository root, `docker compose up --build -d --wait` starts the frontend,
+API, and database. `FRONTEND_PORT` defaults to 8080 and can be changed in `.env`.
+Node builds the application using `npm ci`; the runtime image contains only Nginx
+and the compiled files, and runs as an unprivileged user on container port 8080.
+The frontend build context is `frontend`, separate from the Python image.
+
+Nginx forwards `/api/` and `/status` to `api:8000`, preserving paths and query
+parameters. Future browser calls can use relative URLs without cross-origin
+configuration. Docker DNS is refreshed so API container recreation does not leave
+a stale upstream address. Unknown API paths retain the API's error response;
+only frontend routes fall back to `index.html`. Fingerprinted assets are cached,
+while the HTML entry is revalidated.
+
+After migrations, catalog loading, and import, verify the proxy in PowerShell:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8080/status"
+Invoke-RestMethod "http://127.0.0.1:8080/api/alarms?page=1&page_size=1"
+Invoke-RestMethod "http://127.0.0.1:8080/api/metrics/top-tags?limit=1"
+```
+
+The frontend health check verifies static HTTP serving; it does not check the
+schema or loaded data. API liveness is a startup dependency. In local Vite
+execution, proxy integration is not configured yet; these proxy URLs apply to
+Docker. Neither startup nor rebuilding removes the PostgreSQL volume.
+
 ## Configuration and Operational Limits
 
 Copy `.env.example` to `.env` only when customizing Compose settings. Settings use
 the `ALARM_` prefix; environment variables override `.env`. Changing database
 credentials requires matching `ALARM_DATABASE_URL`, and does not change credentials
 in an already initialized PostgreSQL volume. URL-encode special characters in passwords.
-Set `API_PORT` to change the host port, or `ALARM_DOCS_ENABLED=false` to disable
+Set `API_PORT` or `FRONTEND_PORT` to change the corresponding host port, or `ALARM_DOCS_ENABLED=false` to disable
 Swagger/OpenAPI. `.env` and generated environment/build files are ignored by Git.
 
 The API binds to host loopback, runs as a non-root container user, and exposes no
