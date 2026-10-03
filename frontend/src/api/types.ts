@@ -34,7 +34,7 @@ export interface AlarmQueryFilters {
   tag?: string
 }
 
-export type TopTagFilters = Pick<AlarmQueryFilters, 'start_time' | 'end_time' | 'severity'>
+export type TopTagFilters = AlarmQueryFilters & { alarm_code?: string }
 
 export interface TagCount {
   tag: string
@@ -44,4 +44,13 @@ export interface TagCount {
 export interface TopTags {
   items: TagCount[]
   limit: number
+}
+
+export interface AvailableDates { timezone: string; first_event: string | null; last_event: string | null }
+export interface SignalCatalog { items: { tag: string; equipment_name: string; unit: string; alarm_types: string[] }[] }
+export interface Overview {
+  total_events: number
+  severity_counts: Record<Severity, number>
+  daily: { date: string; event_count: number; moving_average_7_days: string | null }[]
+  comparison: { start_time: string; end_time: string; event_count: number | null; change_percent: string | null; unavailable_reason: string | null }
 }

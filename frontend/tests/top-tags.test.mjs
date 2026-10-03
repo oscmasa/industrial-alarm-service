@@ -17,14 +17,13 @@ test('requests five top tags and preserves API ranking and counts', async () => 
   assert.deepEqual(await fetchTopTags(signal), body)
 })
 
-test('uses time and severity, excluding tag and pagination even if supplied', async () => {
+test('uses all overview filters while excluding pagination', async () => {
   const filters = { start_time: '2026-09-15T05:00:00.000Z', end_time: '2026-09-16T05:00:00.000Z',
-    severity: 'HIGH', tag: 'PUMP_01_FLOW', page: 2 }
+    severity: 'HIGH', tag: 'PUMP_01_FLOW', alarm_code: 'LOW_FLOW', page: 2 }
   globalThis.fetch = async (url) => {
     const parameters = new URL(url, 'http://localhost').searchParams
     assert.equal(parameters.get('limit'), '5')
-    for (const key of ['start_time', 'end_time', 'severity']) assert.equal(parameters.get(key), filters[key])
-    assert.equal(parameters.has('tag'), false)
+    for (const key of ['start_time', 'end_time', 'severity', 'tag', 'alarm_code']) assert.equal(parameters.get(key), filters[key])
     assert.equal(parameters.has('page'), false)
     return Response.json({ items: [], limit: 5 })
   }

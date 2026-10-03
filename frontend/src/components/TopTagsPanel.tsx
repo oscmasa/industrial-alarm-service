@@ -3,56 +3,60 @@ import { AlarmApiError, fetchTopTags } from '../api/client'
 import type { TopTagFilters, TopTags } from '../api/types'
 import { tagBars } from './tagBars'
 
-type MetricsState =
-  | { status: 'loading' }
-  | { status: 'success'; data: TopTags }
-  | { status: 'error'; message: string }
+type MetricsState = {
+  status: 'loading' | 'success' | 'error'
+  requestKey?: string
+  data?: TopTags
+  message?: string
+}
 
 export function TopTagsPanel({ filters }: { filters: TopTagFilters }) {
-  const { start_time: startTime, end_time: endTime, severity } = filters
+  const { start_time: startTime, end_time: endTime, severity, tag, alarm_code } = filters
   const [retry, setRetry] = useState(0)
   const [state, setState] = useState<MetricsState>({ status: 'loading' })
 
+  const requestKey = JSON.stringify([startTime, endTime, severity, tag, alarm_code, retry])
+  const busy = state.status === 'loading' || state.requestKey !== requestKey
+
   useEffect(() => {
     const controller = new AbortController()
-    fetchTopTags(controller.signal, { start_time: startTime, end_time: endTime, severity })
+    fetchTopTags(controller.signal, { start_time: startTime, end_time: endTime, severity, tag, alarm_code })
       .then((data) => {
-        if (!controller.signal.aborted) setState({ status: 'success', data })
+        if (!controller.signal.aborted) setState({ status: 'success', data, requestKey })
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
-          setState({ status: 'error', message: error instanceof AlarmApiError
-            ? error.message : 'Could not load top-tag metrics. Check the service connection and try again.' })
+          setState(current => ({...current, requestKey, status: 'error', message: error instanceof AlarmApiError
+            ? error.message : 'Could not load top-tag metrics. Check the service connection and try again.' }))
         }
       })
     return () => controller.abort()
-  }, [startTime, endTime, severity, retry])
+  }, [startTime, endTime, severity, tag, alarm_code, retry, requestKey])
 
   function retryLoad() {
-    setState({ status: 'loading' })
     setRetry((value) => value + 1)
   }
 
   return (
-    <section className="metrics-panel" aria-labelledby="top-tags-title" aria-busy={state.status === 'loading'}>
+    <section className="metrics-panel" aria-labelledby="top-tags-title" aria-busy={busy}>
       <div className="panel-heading">
         <h2 id="top-tags-title">Top alarm tags</h2>
-        <span>Up to 5 tags · Accepted events</span>
+        <span role="status">{busy && state.data ? 'Updating metrics… Previous results remain visible.' : 'Up to 5 tags · Accepted events'}</span>
       </div>
       <p className="metrics-context">
         {startTime || endTime || severity
-          ? 'Uses the selected time and severity filters.'
+          ? 'Uses all selected overview filters.'
           : 'Counts all accepted historical events across the available dataset.'}
       </p>
-      {state.status === 'loading' && <p className="panel-state" role="status">Loading top-tag metrics…</p>}
-      {state.status === 'error' && (
+      {busy && !state.data && <p className="panel-state" role="status">Loading top-tag metrics…</p>}
+      {state.status === 'error' && !busy && (
         <div className="panel-state error-state">
           <p role="alert">{state.message}</p>
           <button type="button" onClick={retryLoad}>Retry metrics</button>
         </div>
       )}
-      {state.status === 'success' && (state.data.items.length === 0 ? (
-        <p className="panel-state" role="status">No events match the metrics time and severity filters.</p>
+      {state.data && (state.data.items.length === 0 ? (
+        <p className="panel-state" role="status">No events match the selected filters.</p>
       ) : (
         <figure className="tag-chart">
           <figcaption className="visually-hidden">

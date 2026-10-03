@@ -308,10 +308,21 @@ and invalid input (422). The Postman Runner execution passed all 20 checks.
 The frontend is an independent React/TypeScript package in `frontend`.
 The shared layout provides **Overview**, **Alarm history**, and **Data quality**
 navigation. Switching views preserves the history filters and current page.
-Overview currently shows the existing top-tag aggregation across all accepted
-events. Daily trends, available date ranges, and comparisons will be connected in
-the analytics phase. Data quality currently contains the view structure; import
-queries will be connected in its own phase. No mock counts are displayed.
+Overview uses real available dates to list months and defaults to the latest
+observed month. More filters provides an inclusive date range (1-366 days), tag,
+compatible alarm types from the configured catalog, and severity. Changing tag
+clears an incompatible alarm type. Apply filters updates daily bars, the optional
+seven-day moving average, totals, critical events, peak day, and top tags together.
+The applied filter summary remains visible; Reset fields only resets draft inputs.
+Pagination and filter requests keep the last successful content mounted while
+loading; a visible updating notice identifies previous results. Applied summaries
+change after successful responses. Pagination is disabled during a request,
+obsolete requests are cancelled, and errors retain previous results for retry.
+An accessible daily-count table complements the SVG chart. Previous equal-length
+period comparisons remain unavailable when historical dates are insufficient or
+the baseline is zero. Zero events do not establish monitoring coverage or equipment
+health. History filters remain independent. Data quality currently contains the
+view structure; import queries will be connected in its own phase.
 Docker Compose builds the frontend and serves its compiled files through Nginx
 at http://127.0.0.1:8080. The dashboard lists real alarms, with 20 events per
 page, previous/next navigation, and loading, empty, and retryable error states.
@@ -431,10 +442,9 @@ come from PostgreSQL through the API, not from the current table page. Bar lengt
 are proportional to the largest returned count; ties retain the API's tag order.
 The graphic uses HTML/CSS with accessible list labels, without a chart dependency.
 
-Overview currently shows an unfiltered top-tag chart, separate from history
-filters and pagination. The API supports time, severity, tag and alarm-type
-filters; the next frontend phase will connect its own Overview controls to them.
-Chart loading, errors/retry and empty results are independent of the table.
+Overview top tags use its applied time, severity, tag and alarm-type filters,
+independently of history pagination. Chart loading, errors/retry and empty results
+are handled explicitly. No illustrative counts are displayed.
 
 Counts include accepted events with warnings and exclude rejected/duplicate rows.
 They describe activation frequency, not severity scores, duration, or root causes.

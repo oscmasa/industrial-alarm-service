@@ -27,9 +27,21 @@ export function fetchAlarms(page: number, pageSize: number, signal: AbortSignal,
 
 export function fetchTopTags(signal: AbortSignal, filters: TopTagFilters = {}): Promise<TopTags> {
   const parameters = new URLSearchParams({ limit: '5' })
-  for (const name of ['start_time', 'end_time', 'severity'] as const) {
+  for (const name of ['start_time', 'end_time', 'severity', 'tag', 'alarm_code'] as const) {
     const value = filters[name]
     if (value) parameters.set(name, value)
   }
   return requestJson('/api/metrics/top-tags', parameters, signal, 'top-tag metrics')
+}
+
+export function fetchAvailableDates(signal: AbortSignal) {
+  return requestJson<import('./types').AvailableDates>('/api/metrics/available-dates', new URLSearchParams(), signal, 'available dates')
+}
+export function fetchCatalog(signal: AbortSignal) {
+  return requestJson<import('./types').SignalCatalog>('/api/catalog/tags', new URLSearchParams(), signal, 'signal catalog')
+}
+export function fetchOverview(signal: AbortSignal, filters: TopTagFilters) {
+  const parameters = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) if (value) parameters.set(key, value)
+  return requestJson<import('./types').Overview>('/api/metrics/overview', parameters, signal, 'overview metrics')
 }

@@ -7,13 +7,15 @@ import { AlarmTable } from '../components/AlarmTable'
 
 const PAGE_SIZE = 20
 
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'success'; data: AlarmList }
-  | { status: 'error'; message: string }
+type LoadState = {
+  status: 'loading' | 'success' | 'error'
+  data?: AlarmList
+  message?: string
+}
 
 export function AlarmHistoryPage() {
   const [filters, setFilters] = useState<AlarmQueryFilters>({})
+  const [shownFilters, setShownFilters] = useState<AlarmQueryFilters>({})
   const [page, setPage] = useState(1)
   const [retry, setRetry] = useState(0)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
@@ -22,30 +24,30 @@ export function AlarmHistoryPage() {
     const controller = new AbortController()
     fetchAlarms(page, PAGE_SIZE, controller.signal, filters)
       .then((data) => {
-        if (!controller.signal.aborted) setState({ status: 'success', data })
+        if (!controller.signal.aborted) { setState({ status: 'success', data }); setShownFilters(filters) }
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
-          setState({ status: 'error', message: error instanceof AlarmApiError
-            ? error.message : 'Could not load alarms. Check the service connection and try again.' })
+          setState(current => ({ ...current, status: 'error', message: error instanceof AlarmApiError
+            ? error.message : 'Could not load alarms. Check the service connection and try again.' }))
         }
       })
     return () => controller.abort()
   }, [page, retry, filters])
 
   function applyFilters(nextFilters: AlarmQueryFilters) {
-    setState({ status: 'loading' })
+    setState(current => ({ ...current, status: 'loading', message: undefined }))
     setPage(1)
     setFilters(nextFilters)
   }
 
   function changePage(nextPage: number) {
-    setState({ status: 'loading' })
+    setState(current => ({ ...current, status: 'loading', message: undefined }))
     setPage(nextPage)
   }
 
   function retryLoad() {
-    setState({ status: 'loading' })
+    setState(current => ({ ...current, status: 'loading', message: undefined }))
     setRetry((value) => value + 1)
   }
 
@@ -56,31 +58,31 @@ export function AlarmHistoryPage() {
           <h1>Alarm history</h1>
           <p className="page-description">Historical activations across the water treatment and bottling line.</p>
         </div>
-        <AlarmFilters appliedFilters={filters} onApply={applyFilters} />
+        <AlarmFilters appliedFilters={shownFilters} onApply={applyFilters} />
         <section className="alarm-panel" aria-labelledby="records-title" aria-busy={state.status === 'loading'}>
           <div className="panel-heading">
             <h2 id="records-title">Recorded alarms</h2>
-            <span>Newest events first · Bogotá time (UTC−05:00)</span>
+            <span role="status">{state.status === 'loading' && state.data ? 'Updating results… Previous results remain visible.' : 'Newest events first · Bogotá time (UTC−05:00)'}</span>
           </div>
           <div role="status" className="visually-hidden">
-            {state.status === 'success' ? `Page ${state.data.pagination.page} loaded, ${state.data.items.length} events shown.` : ''}
+            {state.status === 'success' && state.data ? `Page ${state.data.pagination.page} loaded, ${state.data.items.length} events shown.` : ''}
           </div>
-          {state.status === 'loading' && <p className="panel-state" role="status">Loading alarm records…</p>}
+          {state.status === 'loading' && !state.data && <p className="panel-state" role="status">Loading alarm records…</p>}
           {state.status === 'error' && (
             <div className="panel-state error-state">
               <p role="alert">{state.message}</p>
               <button type="button" onClick={retryLoad}>Try again</button>
             </div>
           )}
-          {state.status === 'success' && (
+          {state.data && (
             <>
               {state.data.items.length > 0 ? <AlarmTable alarms={state.data.items} /> : (
                 <div className="panel-state">
-                  <p>{state.data.pagination.total === 0 ? (Object.keys(filters).length > 0 ? 'No alarms match the applied filters.' : 'No alarm records are available.') : 'No records on this page.'}</p>
+                  <p>{state.data.pagination.total === 0 ? (Object.keys(shownFilters).length > 0 ? 'No alarms match the applied filters.' : 'No alarm records are available.') : 'No records on this page.'}</p>
                   {page > 1 && <button type="button" onClick={() => changePage(1)}>Return to first page</button>}
                 </div>
               )}
-              <AlarmPagination pagination={state.data.pagination} onPageChange={changePage} />
+              <AlarmPagination pagination={state.data.pagination} busy={state.status === 'loading'} onPageChange={changePage} />
             </>
           )}
         </section>

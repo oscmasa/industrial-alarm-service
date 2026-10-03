@@ -1,6 +1,7 @@
 import type { Pagination } from '../api/types'
 
-export function AlarmPagination({ pagination, onPageChange }: {
+export function AlarmPagination({ pagination, onPageChange, busy = false }: {
+  busy?: boolean
   pagination: Pagination
   onPageChange: (page: number) => void
 }) {
@@ -11,9 +12,9 @@ export function AlarmPagination({ pagination, onPageChange }: {
     <nav className="pagination" aria-label="Alarm pagination">
       <p>{first.toLocaleString('en-US')}–{last.toLocaleString('en-US')} of {total.toLocaleString('en-US')} events</p>
       <div className="pagination-controls">
-        <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button>
+        <button type="button" disabled={busy || page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button>
         <span>Page {page.toLocaleString('en-US')} of {Math.max(1, totalPages).toLocaleString('en-US')}</span>
-        <button type="button" disabled={page >= totalPages || page >= 100000} onClick={() => onPageChange(page + 1)}>Next</button>
+        <button type="button" disabled={busy || page >= totalPages || page >= 100000} onClick={() => onPageChange(page + 1)}>Next</button>
       </div>
     </nav>
   )
