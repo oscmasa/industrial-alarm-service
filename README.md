@@ -72,7 +72,7 @@ rejected stays 300, duplicates becomes 9,700, and accepted_with_warnings becomes
 The alarm count remains 9,500; each execution retains its own audit and rejection records.
 Migrations and catalog seeding can also be rerun without duplicating catalog entries.
 
-- Frontend: http://127.0.0.1:8080 (minimal entry screen at this stage)
+- Frontend: http://127.0.0.1:8080 (paginated alarm history)
 - Interactive API documentation: http://127.0.0.1:8000/docs
 - Alarm listing: http://127.0.0.1:8000/api/alarms?page=1&page_size=10
 - Top tags: http://127.0.0.1:8000/api/metrics/top-tags?limit=5
@@ -298,8 +298,9 @@ and invalid input (422). The Postman Runner execution passed all 20 checks.
 
 The frontend is an independent React/TypeScript package in `frontend`.
 Docker Compose builds the frontend and serves its compiled files through Nginx
-at http://127.0.0.1:8080. The screen is still minimal: alarm listing, filters,
-and charts will be implemented in later steps. Local Node.js is unnecessary
+at http://127.0.0.1:8080. The dashboard lists real alarms, with 20 events per
+page, previous/next navigation, and loading, empty, and retryable error states.
+Filters and charts are not implemented yet. Local Node.js is unnecessary
 when using Docker.
 
 Use Node.js 22.12+ within the Node 22 release line, or Node.js 24+.
@@ -316,13 +317,18 @@ For static checks and production compilation:
 
 ```powershell
 npm run lint
+npm test
 npm run build
 npm run preview
 ```
 
 The production preview runs at http://127.0.0.1:4173. TypeScript uses strict
 checking. `package-lock.json` is committed; `node_modules` and `dist` are generated
-and ignored. The other scaffold files remain empty until their implementation step.
+and ignored. The client uses browser fetch and AbortController; obsolete page
+requests are cancelled and ignored. Tests use the built-in Node.js test runner,
+without adding a test framework dependency. Values remain decimal strings, missing
+fields are labelled as not recorded, and warning details can be expanded.
+Table dates use America/Bogota (UTC-05); hover over a date to see its UTC source.
 
 ### Frontend Container and API Proxy
 
@@ -349,8 +355,9 @@ Invoke-RestMethod "http://127.0.0.1:8080/api/metrics/top-tags?limit=1"
 
 The frontend health check verifies static HTTP serving; it does not check the
 schema or loaded data. API liveness is a startup dependency. In local Vite
-execution, proxy integration is not configured yet; these proxy URLs apply to
-Docker. Neither startup nor rebuilding removes the PostgreSQL volume.
+execution, Vite proxies /api to http://127.0.0.1:8000; start the API first.
+The static production preview does not provide that proxy; use Compose for
+an integrated production build. Neither startup nor rebuilding removes the PostgreSQL volume.
 
 ## Configuration and Operational Limits
 
@@ -367,8 +374,8 @@ authorization, TLS, and rate limiting remain necessary before exposing it beyond
 this local assessment setup.
 
 CSV is the implemented source adapter; JSON is a possible extension. The plant
-catalog is fixed and versioned in code. The frontend toolchain is configured, but
-its alarm features are not implemented. File uploads are outside the current scope.
+catalog is fixed and versioned in code. The frontend implements listing and
+pagination; filters and charts remain pending. File uploads are outside the current scope.
 Offset pagination suits the sample; cursor pagination and
 alternative counting strategies are options for larger histories. Imports are
 atomic but can create long transactions; resumable checkpoints require an
