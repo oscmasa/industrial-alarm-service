@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AlarmQueryFilters, Severity } from '../api/types'
+import { createDebouncer } from './automaticFilters'
 import { EMPTY_FILTERS, validateFilters } from './filterValidation'
 import type { FilterErrors, FilterFields } from './filterValidation'
 
@@ -15,24 +15,22 @@ export function AlarmFilters({ appliedFilters, onApply }: {
   const [fields, setFields] = useState<FilterFields>(EMPTY_FILTERS)
   const [errors, setErrors] = useState<FilterErrors>({})
 
-  function updateField<K extends keyof FilterFields>(field: K, value: FilterFields[K]) {
-    setFields((current) => ({ ...current, [field]: value }))
-    setErrors((current) => ({ ...current, [field]: undefined }))
-  }
+  const debounce = useRef(createDebouncer())
+  useEffect(() => () => debounce.current.cancel(), [])
 
-  function apply(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const result = validateFilters(fields)
-    if (!result.valid) {
-      setErrors(result.errors)
-      return
-    }
+  function updateField<K extends keyof FilterFields>(field: K, value: FilterFields[K]) {
+    debounce.current.cancel()
+    const next = { ...fields, [field]: value }
+    setFields(next)
+    const result = validateFilters(next)
+    if (!result.valid) { setErrors(result.errors); return }
     setErrors({})
-    setFields((current) => ({ ...current, tag: result.filters.tag ?? '' }))
-    onApply(result.filters)
+    if (field === 'tag' && value) debounce.current.schedule(() => onApply(result.filters))
+    else onApply(result.filters)
   }
 
   function clear() {
+    debounce.current.cancel()
     setFields(EMPTY_FILTERS)
     setErrors({})
     onApply({})
@@ -50,7 +48,7 @@ export function AlarmFilters({ appliedFilters, onApply }: {
       <details className="filter-disclosure">
       <summary id="filters-title">Filters <span className="filter-count">{Object.keys(appliedFilters).length > 0 ? `${Object.keys(appliedFilters).length} applied` : 'Optional'}</span></summary>
       <p id="time-help" className="filter-help">Use Bogotá time (UTC−05:00). Results include the start time and exclude the end time.</p>
-      <form onSubmit={apply}>
+      <div className="automatic-filter-fields">
         <div className="filter-fields">
           <div className="filter-field">
             <label htmlFor="start-time">Start date and time</label>
@@ -88,12 +86,11 @@ export function AlarmFilters({ appliedFilters, onApply }: {
           </div>
         </div>
         <div className="filter-actions">
-          <button type="submit" className="primary-button">Apply filters</button>
           <button type="button" onClick={clear}>Clear filters</button>
-          <span>Edit fields, then apply to update results.</span>
+          <span>Filters update automatically. Tag searches wait until you stop typing.</span>
         </div>
-        {Object.values(errors).some(Boolean) && <p className="field-error" role="alert">Review the highlighted filters before applying.</p>}
-      </form>
+        {Object.values(errors).some(Boolean) && <p className="field-error" role="alert">Correct the highlighted fields to update results.</p>}
+      </div>
       </details>
       <p className="filter-summary" role="status">{summary ? `Applied: ${summary}` : 'All recorded alarms · No filters applied'}</p>
     </section>

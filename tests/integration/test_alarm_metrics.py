@@ -93,7 +93,11 @@ def test_top_tags_respects_tag_and_condition(metrics_client):
     params = {"tag": "PUMP_01_FLOW", "alarm_code": "LOW_FLOW", "severity": "HIGH"}
     response = metrics_client.get("/api/metrics/top-tags", params=params)
     assert response.json()["items"] == [{"tag": "PUMP_01_FLOW", "event_count": 2}]
-    incompatible = metrics_client.get("/api/metrics/top-tags", params={
-        **params, "alarm_code": "LOW_PRESSURE",
-    })
+    incompatible = metrics_client.get(
+        "/api/metrics/top-tags",
+        params={
+            **params,
+            "alarm_code": "LOW_PRESSURE",
+        },
+    )
     assert incompatible.json()["items"] == []

@@ -45,3 +45,13 @@ export function fetchOverview(signal: AbortSignal, filters: TopTagFilters) {
   for (const [key, value] of Object.entries(filters)) if (value) parameters.set(key, value)
   return requestJson<import('./types').Overview>('/api/metrics/overview', parameters, signal, 'overview metrics')
 }
+
+export function fetchImports(page: number, signal: AbortSignal) {
+  return requestJson<import('./types').ImportList>('/api/imports',
+    new URLSearchParams({ page: String(page), page_size: '20' }), signal, 'import history')
+}
+export function fetchRejections(importId: string, page: number, signal: AbortSignal, errorCode = '') {
+  const parameters = new URLSearchParams({ page: String(page), page_size: '20' })
+  if (errorCode) parameters.set('error_code', errorCode)
+  return requestJson<import('./types').RejectionList>(`/api/imports/${encodeURIComponent(importId)}/rejections`, parameters, signal, 'rejected records')
+}

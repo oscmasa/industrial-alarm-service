@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
-import { plantDate, nextDay, monthRange, availableMonths } from '../src/components/overviewDates.ts'
+import { plantDate, nextDay, monthRange, availableMonths, compactPeriod } from '../src/components/overviewDates.ts'
 import { fetchOverview, fetchAvailableDates, fetchCatalog } from '../src/api/client.ts'
 const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch })
@@ -37,4 +37,12 @@ test('loads real availability and catalog through separate endpoints', async () 
   const signal = new AbortController().signal
   await fetchAvailableDates(signal); await fetchCatalog(signal)
   assert.deepEqual(seen, ['/api/metrics/available-dates', '/api/catalog/tags'])
+})
+
+test('comparison dates show inclusive bounds and unambiguous month/year transitions', () => {
+  assert.equal(compactPeriod('2026-09-29T05:00:00Z', '2026-10-01T05:00:00Z'), '29-30 Sept 2026')
+  assert.equal(compactPeriod('2026-09-27T05:00:00Z', '2026-09-29T05:00:00Z'), '27-28 Sept 2026')
+  assert.equal(compactPeriod('2026-09-30T05:00:00Z', '2026-10-01T05:00:00Z'), '30 Sept 2026')
+  assert.equal(compactPeriod('2026-09-30T05:00:00Z', '2026-10-02T05:00:00Z'), '30 Sept - 1 Oct 2026')
+  assert.equal(compactPeriod('2025-12-31T05:00:00Z', '2026-01-02T05:00:00Z'), '31 Dec 2025 - 1 Jan 2026')
 })

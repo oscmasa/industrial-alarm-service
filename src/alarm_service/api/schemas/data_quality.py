@@ -1,4 +1,5 @@
 """Validated audit pagination and source-preserving response contracts."""
+
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator

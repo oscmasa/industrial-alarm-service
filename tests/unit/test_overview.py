@@ -155,10 +155,16 @@ def test_overview_database_failure_is_safe(overview_api):
 
 def test_overview_normalizes_tag_and_alarm_code(overview_api):
     client, store = overview_api
-    response = client.get("/api/metrics/overview", params={
-        "start_time": "2026-09-15T05:00:00Z", "end_time": "2026-09-17T05:00:00Z",
-        "tag": " pump_01_flow ", "alarm_code": " low_flow ", "severity": "MEDIUM",
-    })
+    response = client.get(
+        "/api/metrics/overview",
+        params={
+            "start_time": "2026-09-15T05:00:00Z",
+            "end_time": "2026-09-17T05:00:00Z",
+            "tag": " pump_01_flow ",
+            "alarm_code": " low_flow ",
+            "severity": "MEDIUM",
+        },
+    )
     assert response.status_code == 200
     assert store.queries[0].tag == "PUMP_01_FLOW"
     assert store.queries[0].alarm_code == "LOW_FLOW"
@@ -166,17 +172,27 @@ def test_overview_normalizes_tag_and_alarm_code(overview_api):
     assert response.json()["alarm_code"] == "LOW_FLOW"
 
 
-@pytest.mark.parametrize("field,value", [
-    ("tag", ""), ("tag", "PUMP FLOW"), ("tag", "A" * 65),
-    ("alarm_code", ""), ("alarm_code", "X'; DROP TABLE alarms"),
-    ("alarm_code", "A" * 65),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("tag", ""),
+        ("tag", "PUMP FLOW"),
+        ("tag", "A" * 65),
+        ("alarm_code", ""),
+        ("alarm_code", "X'; DROP TABLE alarms"),
+        ("alarm_code", "A" * 65),
+    ],
+)
 def test_invalid_identifiers_never_query_database(overview_api, field, value):
     client, store = overview_api
-    response = client.get("/api/metrics/overview", params={
-        "start_time": "2026-09-15T05:00:00Z", "end_time": "2026-09-17T05:00:00Z",
-        field: value,
-    })
+    response = client.get(
+        "/api/metrics/overview",
+        params={
+            "start_time": "2026-09-15T05:00:00Z",
+            "end_time": "2026-09-17T05:00:00Z",
+            field: value,
+        },
+    )
     assert response.status_code == 422
     assert store.queries == []
 

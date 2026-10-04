@@ -54,3 +54,28 @@ export interface Overview {
   daily: { date: string; event_count: number; moving_average_7_days: string | null }[]
   comparison: { start_time: string; end_time: string; event_count: number | null; change_percent: string | null; unavailable_reason: string | null }
 }
+
+export interface ImportSummary {
+  id: string
+  source_system: string
+  file_name: string
+  file_sha256: string
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  started_at: string
+  finished_at: string | null
+  records_read: number
+  accepted: number
+  rejected: number
+  duplicates: number
+  accepted_with_warnings: number
+}
+export interface ImportList { items: ImportSummary[]; pagination: Pagination }
+export interface RejectedRecord {
+  id: number
+  import_id: string
+  record_number: number
+  original_data: Record<string, unknown>
+  errors: { field: string; code: string; message: string }[]
+  created_at: string
+}
+export interface RejectionList { import_id: string; items: RejectedRecord[]; pagination: Pagination }

@@ -55,9 +55,9 @@ to a numeric measurement. These priorities are chosen solely for the exercise.
 
 ## Source File and Fields
 
-The initial source is `datasets/raw/alarms.csv`: UTF-8 (an optional BOM is
+The committed source is `datasets/raw/alarms.csv`: UTF-8 (an optional BOM is
 accepted), comma-delimited, with a header and standard CSV quoting. Decimal
-commas must be quoted inside CSV fields. Line numbers in rejection reports
+commas must be quoted inside CSV fields. `record_number` values in rejection reports
 refer to source records after the header, starting at 1; they are not physical
 line numbers when a quoted field spans several lines.
 
@@ -81,7 +81,7 @@ EVT-00000123,2026-09-15T14:32:10-05:00,PUMP_01_FLOW,LOW_FLOW,HIGH,Feed flow belo
 The unique event key is `(source_system, event_id)`. The source system is import
 metadata, fixed to `SCADA_01` for this dataset, rather than a repeated CSV column.
 CSV rows contain strings; type irregularities are represented by strings that
-cannot be converted to the expected type. JSON input is a possible future adapter.
+cannot be converted to the expected type. JSON input is outside the implemented scope.
 
 ## Cleaning and Normalization
 
@@ -148,7 +148,7 @@ Missing values are allowed because a SCADA event may omit the captured measureme
 Missing messages are also allowed. Do not invent either field or truncate messages.
 Values must fit NUMERIC(18, 6): less than 10^12 and at most six significant fractional
 digits (trailing zeros are ignored). Unsupported precision is rejected, not rounded.
-NUL characters are rejected because PostgreSQL text/JSON cannot store them. Other
+NUL characters are rejected because PostgreSQL text and JSONB cannot store them. Other
 internal message whitespace, including line breaks, is retained.
 
 ## Rejections and Duplicates
@@ -198,14 +198,14 @@ records_read = accepted + rejected + duplicates
 Rejected rows are excluded from alarm metrics. Independent repeated activations
 with different IDs are counted, even when their timestamp and tag match.
 
-## Reproducible Generation Plan
+## Generation Design
 
 Default seed: 42. Default output: 10,000 rows. Default period: September 2026,
 from September 1 at 00:00 local time (inclusive) to October 1 at 00:00 (exclusive).
 Assume daily operation from 06:00 to 22:00 local time, with no activations generated
 outside this window. These hours are fictional assumptions.
 
-For the default dataset, use disjoint generation categories:
+The default dataset uses disjoint generation categories:
 
 | Category | Rows | Purpose |
 | --- | --- | --- |
@@ -214,35 +214,34 @@ For the default dataset, use disjoint generation categories:
 | Invalid events | 300 | Required nulls, invalid dates, unknown identifiers, or invalid types/ranges |
 | Exact duplicate rows | 200 | Copies of earlier valid events |
 
-Generate 9,800 source rows with fresh IDs before corrupting invalid rows and adding 200 copies. Duplicate references
-must follow their originals. Invalid records must actually violate at least one
-rule. Record the intended category and mutation in a separate generator manifest,
-not in the input CSV. The manifest is verification evidence and must never guide
-acceptance decisions in the importer.
+The generator creates 9,800 source rows with fresh IDs, applies invalid mutations,
+and adds 200 copies after their originals. Invalid records violate at least one
+validation rule. A separate manifest records intended categories and mutations;
+these are absent from the input CSV. The importer does not consult the manifest.
 
 For configurable row counts, allocate 10%, 3%, and 2% to recoverable, invalid,
 and duplicate rows using integer floors; assign the remainder to canonical valid
 rows. Rates are configurable and their total must not exceed 80%, preserving
-catalog coverage. Require 100 to 1,000,000 rows and a period of 1 to 366 days.
+catalog coverage. The CLI accepts 100 to 1,000,000 rows and a period of 1 to 366 days.
 These percentages demonstrate functionality; they are not observed plant statistics.
 Default expected outcome: 9,500 accepted, 300 rejected, and 200 duplicates.
 A repeat import expects zero new alarms (9,700 duplicates and 300 rejections).
 
-Generate valid canonical events first, then apply controlled mutations. Use a
-stable random seed, deterministic IDs, ordering, and timestamp formatting so the
-same inputs reproduce identical files. Distribute tags unevenly to make top-tag
-metrics meaningful. Include at least one clean example for every catalog condition.
+Generation starts with valid canonical events and applies controlled mutations.
+A stable seed, deterministic IDs, ordering, and timestamp formatting support
+reproducibility. Tags have uneven distributions for meaningful ranking examples,
+and every configured alarm condition has at least one clean example.
 
 ### Temporal Scenarios
 
-Include isolated activations and repeated episodes with fresh event IDs:
+The generator includes isolated activations and repeated episodes with fresh IDs:
 
 - Inlet tank LOW_LEVEL, then pump LOW_FLOW after 1-3 minutes, treated tank
   LOW_LEVEL after a further 10-20 minutes, and filler LOW_PRESSURE 1-5 minutes later.
 - Compressor LOW_PRESSURE, then filler CYCLE_FAULT after 1-3 minutes.
 - Recurrent filtration HIGH_DIFF_PRESSURE episodes concentrated in selected days.
 
-Keep scenario events inside the operating window. Time associations are synthetic
+Scenario events remain inside the operating window. Time associations are synthetic
 patterns, not proof of causality. The API reports counts, not root-cause diagnoses.
 
 ## Persistence
@@ -259,7 +258,8 @@ for this exercise; adding multiple plants would require explicit source scoping.
 
 ## Generate and Inspect the Dataset
 
-Install the project dependencies first. `tzdata` supplies IANA timezone data on
+Run commands from the repository root with the Python environment configured
+as described in the [main README](../README.md). Install project dependencies first. `tzdata` supplies IANA timezone data on
 Windows; CSV writing, random generation, dates, JSON, and CLI parsing use the
 Python standard library. No Pandas or Faker dependency is needed.
 
@@ -268,11 +268,12 @@ python -m pip install -e ".[dev]"
 python scripts/generate_dataset.py --rows 10000 --seed 42
 ```
 
-The generator writes `raw/alarms.csv` and `raw/alarms.manifest.json`. The manifest
+From the repository root, the default command writes `datasets/raw/alarms.csv`
+and `datasets/raw/alarms.manifest.json`. The manifest
 contains the CSV SHA-256, category totals, row-level expected outcomes, mutations,
 warning codes, scenario references, and duplicate provenance. It is not an input
 to the importer. `expected_errors` lists targeted reasons, not necessarily every
-error a future validator might report for that row.
+error the normalizer may report for that row.
 
 For another period or a more damaged source, write to a separate output:
 
@@ -299,7 +300,7 @@ python scripts/check_dataset.py --input datasets/raw/alarms.csv
 ```
 
 The preview streams source rows through the same normalizer that the import
-use case will call. It does not write to the database, consult the manifest, or
+use case uses. It does not write to the database, consult the manifest, or
 perform deduplication. For the default CSV it reports 10,000 read rows, 9,700
 acceptable rows, and 300 rejected rows. After deduplication the import must produce
 9,500 accepted events and 200 duplicates.
@@ -314,7 +315,6 @@ Decimal conversion preserves precision; Pydantic checks the normalized structure
 the versioned catalog validates signal/condition relationships. Domain entities
 remain independent of Pydantic, SQLAlchemy, and FastAPI.
 
-Database models, migrations, generation, normalization, and atomic batch imports
-are implemented. See the main README for loading the CSV, checking reconciled
-counters, and confirming that a repeated import inserts zero additional alarms.
+See the [main README](../README.md) for database setup, loading the CSV, checking
+reconciled counters, and verifying that repeat imports insert no additional alarms.
 The normalization preview remains deliberately independent of deduplication.

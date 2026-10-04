@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Industrial Alarm Service",
-    "description": "Ten read-only requests demonstrating service status, pagination, filters, top tags and input validation. Select the local environment and run the collection.",
+    "description": "Read-only checks for status, alarm queries, catalog, overview analytics and import audit results. Load the committed sample, select the local environment and run in collection order. Import history sets import_id for subsequent rejection requests.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -537,6 +537,444 @@
           }
         }
       ]
+    },
+    {
+      "name": "Signal catalog",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/catalog/tags",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "catalog",
+            "tags"
+          ],
+          "query": []
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Catalog defines unique tags and compatible alarm types\", function () {",
+              " const body = pm.response.json();",
+              " pm.expect(body.items.length).to.be.above(0);",
+              " pm.expect(new Set(body.items.map(x => x.tag)).size).to.eql(body.items.length);",
+              " body.items.forEach(x => { pm.expect(x.unit).to.be.a(\"string\"); pm.expect(x.alarm_types.length).to.be.above(0); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Available event dates",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/metrics/available-dates",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "metrics",
+            "available-dates"
+          ],
+          "query": []
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Dataset has ordered observed dates in plant timezone\", function () {",
+              " const body = pm.response.json();",
+              " pm.expect(body.timezone).to.eql(\"America/Bogota\");",
+              " pm.expect(Date.parse(body.first_event)).to.be.at.most(Date.parse(body.last_event));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Overview - two-day comparison",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/metrics/overview?start_time=2026-09-29T00:00:00-05:00&end_time=2026-10-01T00:00:00-05:00",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "metrics",
+            "overview"
+          ],
+          "query": [
+            {
+              "key": "start_time",
+              "value": "2026-09-29T00:00:00-05:00"
+            },
+            {
+              "key": "end_time",
+              "value": "2026-10-01T00:00:00-05:00"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Overview aggregates and comparison agree with daily counts\", function () {",
+              " const body = pm.response.json();",
+              " pm.expect(body.daily.length).to.eql(2);",
+              " pm.expect(body.daily.map(x => x.date)).to.eql([\"2026-09-29\", \"2026-09-30\"]);",
+              " pm.expect(body.total_events).to.eql(body.daily.reduce((sum,x) => sum+x.event_count,0));",
+              " pm.expect(Object.values(body.severity_counts).reduce((sum,x) => sum+x,0)).to.eql(body.total_events);",
+              " pm.expect(Date.parse(body.comparison.start_time)).to.eql(Date.parse(\"2026-09-27T00:00:00-05:00\"));",
+              " pm.expect(Date.parse(body.comparison.end_time)).to.eql(Date.parse(\"2026-09-29T00:00:00-05:00\"));",
+              " if (body.comparison.event_count > 0) pm.expect(Number(body.comparison.change_percent)).to.be.closeTo((body.total_events-body.comparison.event_count)*100/body.comparison.event_count,0.011);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Overview - combined catalog filters",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/metrics/overview?start_time=2026-09-29T00:00:00-05:00&end_time=2026-10-01T00:00:00-05:00&tag=PUMP_01_FLOW&alarm_code=LOW_FLOW&severity=HIGH",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "metrics",
+            "overview"
+          ],
+          "query": [
+            {
+              "key": "start_time",
+              "value": "2026-09-29T00:00:00-05:00"
+            },
+            {
+              "key": "end_time",
+              "value": "2026-10-01T00:00:00-05:00"
+            },
+            {
+              "key": "tag",
+              "value": "PUMP_01_FLOW"
+            },
+            {
+              "key": "alarm_code",
+              "value": "LOW_FLOW"
+            },
+            {
+              "key": "severity",
+              "value": "HIGH"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"All selected filters scope overview\", function () {",
+              " const body = pm.response.json();",
+              " pm.expect(body.tag).to.eql(\"PUMP_01_FLOW\"); pm.expect(body.alarm_code).to.eql(\"LOW_FLOW\"); pm.expect(body.severity).to.eql(\"HIGH\");",
+              " pm.expect(body.total_events).to.eql(body.severity_counts.HIGH);",
+              " pm.expect(body.severity_counts.CRITICAL+body.severity_counts.MEDIUM+body.severity_counts.LOW).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Import history",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/imports?page=1&page_size=20",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "imports"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "page_size",
+              "value": "20"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Execution counters balance and establish rejection selection\", function () {",
+              " const body = pm.response.json();",
+              " pm.expect(body.items.length).to.be.above(0);",
+              " pm.expect(body.pagination.page_size).to.eql(20);",
+              " body.items.forEach(x => { if (x.status === \"COMPLETED\") pm.expect(x.accepted+x.rejected+x.duplicates).to.eql(x.records_read); pm.expect(x.accepted_with_warnings).to.be.at.most(x.accepted); pm.expect(x.error_message).to.eql(undefined); });",
+              " pm.collectionVariables.set(\"import_id\",body.items[0].id);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rejected records - selected execution",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/imports/{{import_id}}/rejections?page=1&page_size=10",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "imports",
+            "{{import_id}}",
+            "rejections"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "page_size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Rejections preserve source data and ordered issues\", function () {",
+              " const body = pm.response.json();",
+              " pm.expect(body.import_id).to.eql(pm.collectionVariables.get(\"import_id\"));",
+              " pm.expect(body.items.length).to.be.at.most(10);",
+              " body.items.forEach((x,i) => { pm.expect(x.original_data).to.be.an(\"object\"); pm.expect(x.errors.length).to.be.above(0); if (i) pm.expect(x.record_number).to.be.above(body.items[i-1].record_number); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rejected records - reason filter",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/imports/{{import_id}}/rejections?error_code=INVALID_VALUE&page_size=10",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "imports",
+            "{{import_id}}",
+            "rejections"
+          ],
+          "query": [
+            {
+              "key": "error_code",
+              "value": "INVALID_VALUE"
+            },
+            {
+              "key": "page_size",
+              "value": "10"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Returned records contain the selected issue code\", function () {",
+              " const body = pm.response.json();",
+              " pm.expect(body.items).to.be.an(\"array\");",
+              " pm.expect(body.pagination.total).to.be.above(0);",
+              " body.items.forEach(x => pm.expect(x.errors.some(e => e.code === \"INVALID_VALUE\")).to.eql(true));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Missing import",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/imports/00000000-0000-0000-0000-000000000000/rejections",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "imports",
+            "00000000-0000-0000-0000-000000000000",
+            "rejections"
+          ],
+          "query": []
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });",
+              "pm.test(\"Unknown import has a clear 404 response\", function () {",
+              " pm.expect(pm.response.json().detail).to.eql(\"Import not found.\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invalid rejection reason code",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/imports/{{import_id}}/rejections?error_code=9501",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "imports",
+            "{{import_id}}",
+            "rejections"
+          ],
+          "query": [
+            {
+              "key": "error_code",
+              "value": "9501"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 422\", function () { pm.response.to.have.status(422); });",
+              "pm.test(\"Malformed reason code has structured validation errors\", function () {",
+              " pm.expect(pm.response.json().detail).to.be.an(\"array\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "import_id",
+      "value": "00000000-0000-0000-0000-000000000000"
     }
   ]
 }

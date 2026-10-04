@@ -23,10 +23,25 @@ class FakeQuality:
         self.calls.append((page, page_size))
         if self.failure:
             raise OperationalError("private SQL", {}, Exception("private password"))
-        return QualityPage([ImportSummary(
-            IMPORT_ID, "SCADA_01", "alarms.csv", "a" * 64, "COMPLETED", NOW, NOW,
-            10000, 9500, 300, 200, 167,
-        )], 1)
+        return QualityPage(
+            [
+                ImportSummary(
+                    IMPORT_ID,
+                    "SCADA_01",
+                    "alarms.csv",
+                    "a" * 64,
+                    "COMPLETED",
+                    NOW,
+                    NOW,
+                    10000,
+                    9500,
+                    300,
+                    200,
+                    167,
+                )
+            ],
+            1,
+        )
 
     def list_rejections(self, import_id, page, page_size, error_code):
         self.calls.append((import_id, page, page_size, error_code))
@@ -34,10 +49,19 @@ class FakeQuality:
             return None
         if error_code == "UNKNOWN_CODE":
             return QualityPage([], 0)
-        return QualityPage([RejectedRecord(
-            1, IMPORT_ID, 12, {"value": "  bad value ", "occurred_at": "invalid"},
-            [{"field": "value", "code": "INVALID_NUMBER", "message": "Invalid number."}], NOW,
-        )], 1)
+        return QualityPage(
+            [
+                RejectedRecord(
+                    1,
+                    IMPORT_ID,
+                    12,
+                    {"value": "  bad value ", "occurred_at": "invalid"},
+                    [{"field": "value", "code": "INVALID_NUMBER", "message": "Invalid number."}],
+                    NOW,
+                )
+            ],
+            1,
+        )
 
 
 @pytest.fixture
@@ -62,9 +86,14 @@ def test_import_counters_and_default_pagination(api):
 
 def test_preserves_raw_values_and_normalizes_error_filter(api):
     client, store = api
-    response = client.get(f"/api/imports/{IMPORT_ID}/rejections", params={
-        "error_code": " invalid_number ", "page": 2, "page_size": 1,
-    })
+    response = client.get(
+        f"/api/imports/{IMPORT_ID}/rejections",
+        params={
+            "error_code": " invalid_number ",
+            "page": 2,
+            "page_size": 1,
+        },
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["items"][0]["original_data"]["value"] == "  bad value "
@@ -81,19 +110,22 @@ def test_unknown_import_differs_from_no_matching_rejections(api):
     assert response.json()["items"] == []
 
 
-@pytest.mark.parametrize("path,params", [
-    ("/api/imports", {"page": 0}),
-    ("/api/imports", {"page": 100001}),
-    ("/api/imports", {"page_size": 101}),
-    ("/api/imports", {"page_size": 0}),
-    ("/api/imports", {"page": "bad"}),
-    ("/api/imports", {"unexpected": "bad"}),
-    (f"/api/imports/{IMPORT_ID}/rejections", {"error_code": ""}),
-    (f"/api/imports/{IMPORT_ID}/rejections", {"error_code": "BAD CODE"}),
-    (f"/api/imports/{IMPORT_ID}/rejections", {"error_code": "A" * 65}),
-    (f"/api/imports/{IMPORT_ID}/rejections", {"page_size": 101}),
-    ("/api/imports/not-a-uuid/rejections", {}),
-])
+@pytest.mark.parametrize(
+    "path,params",
+    [
+        ("/api/imports", {"page": 0}),
+        ("/api/imports", {"page": 100001}),
+        ("/api/imports", {"page_size": 101}),
+        ("/api/imports", {"page_size": 0}),
+        ("/api/imports", {"page": "bad"}),
+        ("/api/imports", {"unexpected": "bad"}),
+        (f"/api/imports/{IMPORT_ID}/rejections", {"error_code": ""}),
+        (f"/api/imports/{IMPORT_ID}/rejections", {"error_code": "BAD CODE"}),
+        (f"/api/imports/{IMPORT_ID}/rejections", {"error_code": "A" * 65}),
+        (f"/api/imports/{IMPORT_ID}/rejections", {"page_size": 101}),
+        ("/api/imports/not-a-uuid/rejections", {}),
+    ],
+)
 def test_invalid_requests_do_not_query_store(api, path, params):
     client, store = api
     response = client.get(path, params=params)

@@ -31,7 +31,9 @@ class FakeStore:
         )
         return AlarmPage(
             [AlarmRecord(1, "SCADA_01", uuid.UUID(int=1), alarm, unit="L/min")],
-            123, query.page, query.page_size
+            123,
+            query.page,
+            query.page_size,
         )
 
 

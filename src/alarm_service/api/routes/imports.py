@@ -1,4 +1,5 @@
 """Read-only import history and original rejected records."""
+
 from typing import Annotated
 from uuid import UUID
 
@@ -21,7 +22,9 @@ router = APIRouter(prefix="/api/imports", tags=["Data quality"])
 
 def pagination(filters: QualityFilters, total: int) -> Pagination:
     return Pagination(
-        page=filters.page, page_size=filters.page_size, total=total,
+        page=filters.page,
+        page_size=filters.page_size,
+        total=total,
         total_pages=(total + filters.page_size - 1) // filters.page_size,
     )
 
@@ -44,9 +47,7 @@ def list_rejections(
     filters: Annotated[RejectionFilters, Query()],
     store: Annotated[DataQualityStore, Depends(get_data_quality_store)],
 ) -> RejectionListResponse:
-    result = store.list_rejections(
-        import_id, filters.page, filters.page_size, filters.error_code
-    )
+    result = store.list_rejections(import_id, filters.page, filters.page_size, filters.error_code)
     if result is None:
         raise HTTPException(status_code=404, detail="Import not found.")
     return RejectionListResponse(

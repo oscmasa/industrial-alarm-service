@@ -118,8 +118,7 @@ def test_tag_catalog_units_are_exposed_without_changing_values(alarm_client):
 
 
 def test_overview_groups_by_bogota_day_and_filters_severity(alarm_client):
-    params = {"start_time": "2026-09-14T05:00:00Z",
-              "end_time": "2026-09-16T05:00:00Z"}
+    params = {"start_time": "2026-09-14T05:00:00Z", "end_time": "2026-09-16T05:00:00Z"}
     body = alarm_client.get("/api/metrics/overview", params=params).json()
     assert body["total_events"] == 5
     assert [row["event_count"] for row in body["daily"]] == [5, 0]
@@ -130,10 +129,13 @@ def test_overview_groups_by_bogota_day_and_filters_severity(alarm_client):
     dates = alarm_client.get("/api/metrics/available-dates").json()
     assert dates["first_event"] == "2026-09-15T00:00:00Z"
     assert dates["last_event"] == "2026-09-15T02:00:00Z"
-    next_day = alarm_client.get("/api/metrics/overview", params={
-        "start_time": "2026-09-15T05:00:00Z",
-        "end_time": "2026-09-16T05:00:00Z",
-    }).json()
+    next_day = alarm_client.get(
+        "/api/metrics/overview",
+        params={
+            "start_time": "2026-09-15T05:00:00Z",
+            "end_time": "2026-09-16T05:00:00Z",
+        },
+    ).json()
     assert next_day["total_events"] == 0
     assert next_day["daily"][0]["moving_average_7_days"] is None
 
@@ -145,10 +147,13 @@ def test_overview_empty_database(database):
     with TestClient(app) as client:
         dates = client.get("/api/metrics/available-dates").json()
         assert dates["first_event"] is None and dates["last_event"] is None
-        result = client.get("/api/metrics/overview", params={
-            "start_time": "2026-09-01T05:00:00Z",
-            "end_time": "2026-10-01T05:00:00Z",
-        })
+        result = client.get(
+            "/api/metrics/overview",
+            params={
+                "start_time": "2026-09-01T05:00:00Z",
+                "end_time": "2026-10-01T05:00:00Z",
+            },
+        )
         assert result.status_code == 200
         body = result.json()
         assert body["total_events"] == 0 and len(body["daily"]) == 30
@@ -156,14 +161,22 @@ def test_overview_empty_database(database):
 
 
 def test_overview_tag_and_condition_filters(alarm_client):
-    params = {"start_time": "2026-09-14T05:00:00Z",
-              "end_time": "2026-09-16T05:00:00Z", "tag": "PUMP_01_FLOW",
-              "alarm_code": "LOW_FLOW", "severity": "HIGH"}
+    params = {
+        "start_time": "2026-09-14T05:00:00Z",
+        "end_time": "2026-09-16T05:00:00Z",
+        "tag": "PUMP_01_FLOW",
+        "alarm_code": "LOW_FLOW",
+        "severity": "HIGH",
+    }
     result = alarm_client.get("/api/metrics/overview", params=params).json()
     assert result["total_events"] == 3
     assert result["daily"][0]["event_count"] == 3
-    incompatible = alarm_client.get("/api/metrics/overview", params={
-        **params, "alarm_code": "LOW_LEVEL",
-    }).json()
+    incompatible = alarm_client.get(
+        "/api/metrics/overview",
+        params={
+            **params,
+            "alarm_code": "LOW_LEVEL",
+        },
+    ).json()
     assert incompatible["total_events"] == 0
     assert all(row["event_count"] == 0 for row in incompatible["daily"])

@@ -26,3 +26,14 @@ export function availableMonths(first: string, last: string): string[] {
 export function dateLabel(day: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${day}T12:00:00Z`))
 }
+
+export function compactPeriod(start: string, exclusiveEnd: string): string {
+  const first = plantDate(start)
+  const last = plantDate(new Date(Date.parse(exclusiveEnd) - 1).toISOString())
+  const label = (day: string, year: boolean) => new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', ...(year ? { year: 'numeric' as const } : {}), timeZone: 'UTC',
+  }).format(new Date(`${day}T12:00:00Z`))
+  if (first === last) return label(last, true)
+  if (first.slice(0, 7) === last.slice(0, 7)) return `${Number(first.slice(8))}-${label(last, true)}`
+  return `${label(first, first.slice(0, 4) !== last.slice(0, 4))} - ${label(last, true)}`
+}

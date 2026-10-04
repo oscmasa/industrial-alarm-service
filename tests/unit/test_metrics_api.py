@@ -108,9 +108,13 @@ def test_metrics_openapi_parameters(api):
 
 def test_metrics_tag_and_condition_filters_are_normalized(api):
     client, store = api
-    response = client.get("/api/metrics/top-tags", params={
-        "tag": " pump_01_flow ", "alarm_code": " low_flow ",
-    })
+    response = client.get(
+        "/api/metrics/top-tags",
+        params={
+            "tag": " pump_01_flow ",
+            "alarm_code": " low_flow ",
+        },
+    )
     assert response.status_code == 200
     assert store.queries[0].tag == "PUMP_01_FLOW"
     assert store.queries[0].alarm_code == "LOW_FLOW"

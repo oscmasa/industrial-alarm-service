@@ -72,7 +72,7 @@ rejected stays 300, duplicates becomes 9,700, and accepted_with_warnings becomes
 The alarm count remains 9,500; each execution retains its own audit and rejection records.
 Migrations and catalog seeding can also be rerun without duplicating catalog entries.
 
-- Frontend: http://127.0.0.1:8080 (paginated alarm history)
+- Frontend: http://127.0.0.1:8080 (Overview, Alarm history and Data quality)
 - Interactive API documentation: http://127.0.0.1:8000/docs
 - Alarm listing: http://127.0.0.1:8000/api/alarms?page=1&page_size=10
 - Top tags: http://127.0.0.1:8000/api/metrics/top-tags?limit=5
@@ -152,6 +152,88 @@ query parameters, invalid severity, and out-of-range pagination/limits return
 HTTP 422 with structured validation errors. Database-operation failures return
 a generic HTTP 503 without exposing SQL, credentials, or tracebacks.
 
+### Overview Metrics API
+
+`GET /api/catalog/tags` exposes the fixed configured catalog version, equipment
+names, units and compatible `alarm_types` for each tag. The frontend restricts
+alarm-type choices after selecting a tag and resets an incompatible selection.
+Catalog choices are independent of events available in a selected period;
+severity remains independent of each condition's default severity.
+
+Both `/api/metrics/overview` and `/api/metrics/top-tags` accept optional `tag` and
+`alarm_code` filters, trimmed and uppercased. Filters combine with time and
+severity using AND and apply consistently to all aggregates, trailing averages
+and previous-period comparisons. Unknown identifiers or incompatible combinations
+return empty metrics; malformed identifiers return 422. Global available event
+dates remain independent of these filters.
+
+`GET /api/metrics/available-dates` returns the first and last accepted event
+timestamps plus `America/Bogota`. An empty database returns null bounds. These
+dates describe observed events, not guaranteed continuous monitoring coverage.
+
+`GET /api/metrics/overview` requires `start_time` and `end_time` with explicit
+timezone offsets, at midnight in Bogotá. The start is included and the end is
+excluded; ranges are limited to 366 days. Optional `severity` applies to current
+counts, the previous period and the moving average alike. For September:
+
+```text
+/api/metrics/overview?start_time=2026-09-01T00:00:00-05:00&end_time=2026-10-01T00:00:00-05:00
+```
+
+The response includes total events, all four severity counts, daily counts and
+a seven-day trailing average including the selected day. The first six days may
+use earlier events outside the selected range. An average is null when its
+seven-day window extends outside observed event dates. Daily zero counts mean
+no stored events, not proof that a machine was operating without alarms.
+
+Comparison uses the immediately preceding interval of equal duration (a 30-day
+selection compares against the preceding 30 days, not necessarily a calendar
+month). Both intervals must lie within observed event dates. Otherwise the
+baseline and percentage are null with `outside_observed_dates`. A zero baseline
+returns a null percentage with `zero_baseline`. A nonzero baseline uses
+`(current - previous) / previous * 100`. Averages and percentages are JSON decimal
+strings rounded to two decimals; captured readings are never rounded or updated.
+Date availability does not establish completeness of either period.
+
+All aggregates use accepted unique events, including events with warnings.
+PostgreSQL groups by local day and severity within indexed timestamp bounds;
+Python processes only the bounded aggregate rows. Counts and date bounds share
+a read-only repeatable-read snapshot with a ten-second statement timeout.
+The Overview view consumes these endpoints for its month selection, timeline,
+summary cards, and filtered tag ranking.
+
+### Data Quality API
+
+`GET /api/imports?page=1&page_size=20` lists audit executions, newest first
+(`started_at DESC, id DESC`). Each item includes source, file name, checksum,
+status, start/finish timestamps and the five persisted counters. Executions of the
+same file remain separate: a repeated load can have zero accepted records and many
+duplicates. Accepted-with-warning records are a subset of accepted records, not an
+additional outcome. Counters belong to each execution; do not sum repeated imports
+as unique events. Pending/running/failed executions may have incomplete counters.
+Internal operational exception details are deliberately excluded.
+
+`GET /api/imports/{import_id}/rejections?page=1&page_size=20` returns rejected
+records in source-record order, with their original JSON values, issue fields,
+codes and messages, and audit timestamp. Optional `error_code=INVALID_VALUE`
+filters records containing that exact issue code (trimmed and uppercased).
+A record with multiple issues is counted once; all its issues remain in the
+response. Unknown valid codes return an empty page. `record_number` is the
+one-based CSV data-record number, excluding the header, rather than a guaranteed
+physical line number when quoted fields contain newlines. Raw source values remain
+unchanged; JSON formatting does not reproduce the original CSV bytes.
+
+Both endpoints return `items` and `pagination` (`page`, `page_size`, `total`,
+`total_pages`); rejection responses also identify `import_id`. Page size defaults
+to 20 and is capped at 100; pages are limited to 1-100000. Malformed input or
+unknown query parameters return 422. An unknown import UUID returns 404, while an
+existing import without rejections returns 200 with an empty list. A database
+failure returns a safe 503. Read-only repeatable-read transactions keep counts and
+items consistent, with a 10-second statement timeout. Existing import-date and
+unique `(import_id, record_number)` indexes support ordering and import isolation.
+Original records and checksums are audit data; access should be restricted outside
+the local demonstration environment.
+
 ## Cleaning and Import Decisions
 
 The CSV adapter streams records through a shared normalizer. Python's standard
@@ -208,6 +290,7 @@ and SQLAlchemy without adding a large framework for a small assessment.
 | migrations | Versioned Alembic schema changes |
 | tests | Unit and integration coverage |
 | docs/postman | API collection and local environment |
+| frontend | React/TypeScript dashboard and Nginx runtime |
 
 PostgreSQL is the relational equivalent chosen for Docker availability, constraints,
 transactional imports, and SQL aggregation. SQLAlchemy supplies database access;
@@ -289,9 +372,8 @@ If credentials change, update the test URL. Tests create and remove isolated
 schemas; the database user must have permission to create schemas. Coverage
 includes invalid source data, UTC conversion, precision, duplicate conflicts,
 transaction rollback, repeat imports, migrations, pagination, filters, and exact
-aggregation results. The previous full PostgreSQL run passed 147 tests. After adding
-18 direct use-case checks, the local run passed 149 tests with 16 PostgreSQL tests
-skipped; run the Docker command above to verify all 165 tests with a database.
+aggregation results. Run the full Docker suite to include PostgreSQL checks;
+a passing local run with skipped database tests does not validate database behavior.
 
 Import these files into Postman:
 
@@ -299,11 +381,16 @@ Import these files into Postman:
 - `docs/postman/local.postman_environment.json`
 
 Select **Industrial Alarm Service - Local**, confirm `base_url`, and use
-**Run collection** after loading the dataset. The collection contains 10 requests
-and 20 checks covering status, listing, individual/combined filters, top tags,
-and invalid input (422). The Postman Runner execution passed all 20 checks.
+**Run collection** after loading the dataset. The collection has 19 requests and
+38 checks covering status, alarm filters/pagination, top tags, configured catalog,
+available dates, two-day comparisons, combined overview filters, import counters,
+original rejections, rejection-code filters, 404 and 422 responses. Run in collection
+order: Import history sets the collection's `import_id` from a real execution for
+subsequent rejection requests. Reimport the updated collection if an earlier
+version is already present in Postman. Tests assume the committed September sample
+has been loaded. No request writes or reimports data.
 
-## Frontend Setup
+## Dashboard and Frontend Development
 
 The frontend is an independent React/TypeScript package in `frontend`.
 The shared layout provides **Overview**, **Alarm history**, and **Data quality**
@@ -311,23 +398,31 @@ navigation. Switching views preserves the history filters and current page.
 Overview uses real available dates to list months and defaults to the latest
 observed month. More filters provides an inclusive date range (1-366 days), tag,
 compatible alarm types from the configured catalog, and severity. Changing tag
-clears an incompatible alarm type. Apply filters updates daily bars, the optional
+clears an incompatible alarm type. Changing a valid filter automatically updates daily bars, the optional
 seven-day moving average, totals, critical events, peak day, and top tags together.
-The applied filter summary remains visible; Reset fields only resets draft inputs.
+The compact Overview comparison card explicitly names the preceding equal-length
+period in days and includes both inclusive date ranges and their event counts.
+The percentage describes more/fewer recorded activations, not equipment condition.
+Dates include the year and distinguish month/year boundaries. Missing prior data
+shows No history, while a zero baseline shows 0 events with an unavailable
+percentage; zero is never substituted for missing history.
+
+The applied filter summary remains visible; Clear filters restores the selected
+month and all tags, alarm types and severities. Invalid or incomplete dates retain
+the previous results until a valid period is selected.
 Pagination and filter requests keep the last successful content mounted while
 loading; a visible updating notice identifies previous results. Applied summaries
 change after successful responses. Pagination is disabled during a request,
 obsolete requests are cancelled, and errors retain previous results for retry.
 An accessible daily-count table complements the SVG chart. Previous equal-length
-period comparisons remain unavailable when historical dates are insufficient or
-the baseline is zero. Zero events do not establish monitoring coverage or equipment
-health. History filters remain independent. Data quality currently contains the
-view structure; import queries will be connected in its own phase.
+period comparisons show missing history explicitly; a zero baseline retains its
+zero event count but cannot produce a percentage change. Zero events do not establish monitoring coverage or equipment
+health. History filters remain independent. Data quality displays real import executions,
+per-execution quality counters and paginated rejected source records.
 Docker Compose builds the frontend and serves its compiled files through Nginx
 at http://127.0.0.1:8080. The dashboard lists real alarms, with 20 events per
 page, previous/next navigation, and loading, empty, and retryable error states.
-Time, severity, and exact-tag filters are available, together with top-tag metrics. Local Node.js is unnecessary
-when using Docker.
+Local Node.js is unnecessary when using Docker.
 
 Use Node.js 22.12+ within the Node 22 release line, or Node.js 24+.
 From the repository root:
@@ -356,56 +451,6 @@ without adding a test framework dependency. Values remain decimal strings, missi
 fields are labelled as not recorded, and warning details can be expanded.
 Table dates use America/Bogota (UTC-05); hover over a date to see its UTC source.
 
-### Overview Metrics API
-
-`GET /api/catalog/tags` exposes the fixed configured catalog version, equipment
-names, units and compatible `alarm_types` for each tag. The frontend can restrict
-alarm-type choices after selecting a tag and reset an incompatible selection.
-Catalog choices are independent of events available in a selected period;
-severity remains independent of each condition's default severity.
-
-Both `/api/metrics/overview` and `/api/metrics/top-tags` accept optional `tag` and
-`alarm_code` filters, trimmed and uppercased. Filters combine with time and
-severity using AND and apply consistently to all aggregates, trailing averages
-and previous-period comparisons. Unknown identifiers or incompatible combinations
-return empty metrics; malformed identifiers return 422. Global available event
-dates remain independent of these filters.
-
-`GET /api/metrics/available-dates` returns the first and last accepted event
-timestamps plus `America/Bogota`. An empty database returns null bounds. These
-dates describe observed events, not guaranteed continuous monitoring coverage.
-
-`GET /api/metrics/overview` requires `start_time` and `end_time` with explicit
-timezone offsets, at midnight in Bogotá. The start is included and the end is
-excluded; ranges are limited to 366 days. Optional `severity` applies to current
-counts, the previous period and the moving average alike. For September:
-
-```text
-/api/metrics/overview?start_time=2026-09-01T00:00:00-05:00&end_time=2026-10-01T00:00:00-05:00
-```
-
-The response includes total events, all four severity counts, daily counts and
-a seven-day trailing average including the selected day. The first six days may
-use earlier events outside the selected range. An average is null when its
-seven-day window extends outside observed event dates. Daily zero counts mean
-no stored events, not proof that a machine was operating without alarms.
-
-Comparison uses the immediately preceding interval of equal duration (a 30-day
-selection compares against the preceding 30 days, not necessarily a calendar
-month). Both intervals must lie within observed event dates. Otherwise the
-baseline and percentage are null with `outside_observed_dates`. A zero baseline
-returns a null percentage with `zero_baseline`. A nonzero baseline uses
-`(current - previous) / previous * 100`. Averages and percentages are JSON decimal
-strings rounded to two decimals; captured readings are never rounded or updated.
-Date availability does not establish completeness of either period.
-
-All aggregates use accepted unique events, including events with warnings.
-PostgreSQL groups by local day and severity within indexed timestamp bounds;
-Python processes only the bounded aggregate rows. Counts and date bounds share
-a read-only repeatable-read snapshot with a ten-second statement timeout.
-These endpoints prepare the next frontend phase; the current UI has not yet
-connected its timeline or month selection.
-
 ### History Filter Interaction
 
 History filters are collapsed by default. Expand **Filters** to edit the range,
@@ -414,11 +459,11 @@ show a full calendar date and a separate 24-hour time in Bogotá (UTC−05:00).
 Expand **View message** for the recorded message and the warning count for
 normalization warnings. The presentation does not change captured values.
 
-Use **Apply filters** to submit an optional start/end time, severity, and exact tag.
-Editing a field alone does not change the active query. **Clear filters** resets
-both the form and applied filters. Applying or clearing returns to page 1; page
-navigation retains the active filters. The applied summary identifies the query
-currently used by the table, even while the form is being edited.
+Valid optional start/end times and severity update automatically; exact-tag text
+waits 400 ms after the last edit. **Clear filters** resets the fields and query.
+Changing or clearing a filter returns to page 1; pagination retains active filters.
+The applied summary identifies the successfully loaded query while edits or
+requests are pending.
 
 Datetime inputs use the plant's UTC-05 clock, explicitly converted to UTC before
 sending. The browser's local timezone is not used. This fixed offset matches the
@@ -450,6 +495,25 @@ Counts include accepted events with warnings and exclude rejected/duplicate rows
 They describe activation frequency, not severity scores, duration, or root causes.
 `npm test` covers client requests, filter forwarding, cancellation, empty responses,
 bar scaling, and failure handling, together with the existing list/filter tests.
+
+### Data Quality View
+
+The Data quality frontend loads execution options 20 at a time, newest first,
+with import-list pagination for older runs. Options include the plant timestamp,
+file name, status and short import ID; full ID and checksum are available under
+Execution details. Paging the import list preserves the current selection until
+a different execution is chosen. The latest execution is selected initially.
+
+Four compact, labelled cards use blue (accepted), red (rejected), purple
+(duplicates) and yellow (accepted with warnings). The optional rejection reason code updates automatically after 400 ms of typing; clearing it applies immediately. Invalid codes show an explanation without sending a request. The error-code filter affects
+only the rejection table; cards retain the execution totals. Switching executions
+clears the issue filter and resets rejection pagination. Each row lists all its
+issues, with original JSON in a disclosure. Sticky table headings, bounded table
+scroll, explicit empty/error states and retries keep the compact layout usable.
+Previous results remain visible with an updating notice during requests; their
+execution metadata stays attached until the new results arrive. Obsolete requests
+are cancelled. Original JSON is rendered as text, rather than injected HTML.
+These endpoints can also be exercised through `/docs`.
 
 ### Frontend Container and API Proxy
 
@@ -494,9 +558,9 @@ database host port. Default credentials are for local development. Authenticatio
 authorization, TLS, and rate limiting remain necessary before exposing it beyond
 this local assessment setup.
 
-CSV is the implemented source adapter; JSON is a possible extension. The plant
-catalog is fixed and versioned in code. The frontend implements listing and
-pagination, filters, and top-tag visualization. File uploads are outside the current scope.
+CSV is the implemented source adapter. The plant catalog is fixed and versioned
+in code. The three dashboard views cover overview analytics, alarm history, and
+import quality. File uploads and JSON input are outside the implemented scope.
 Offset pagination suits the sample; cursor pagination and
 alternative counting strategies are options for larger histories. Imports are
 atomic but can create long transactions; resumable checkpoints require an
@@ -504,39 +568,22 @@ explicit design. Abrupt termination can leave an audit in `RUNNING`.
 Docker provides a repeatable setup, while image tags and dependency ranges are
 not an exact dependency lock.
 
+## Verification Checklist
 
-### Data Quality API
+Before submitting:
 
-`GET /api/imports?page=1&page_size=20` lists audit executions, newest first
-(`started_at DESC, id DESC`). Each item includes source, file name, checksum,
-status, start/finish timestamps and the five persisted counters. Executions of the
-same file remain separate: a repeated load can have zero accepted records and many
-duplicates. Accepted-with-warning records are a subset of accepted records, not an
-additional outcome. Counters belong to each execution; do not sum repeated imports
-as unique events. Pending/running/failed executions may have incomplete counters.
-Internal operational exception details are deliberately excluded.
+1. Follow Quick Start on a fresh checkout/database: build the containers, apply
+   migrations, seed the catalog and import the committed CSV. Use a separate
+   Compose project/volume when an existing local database must be preserved.
+2. Run the complete PostgreSQL test command under Tests and Postman; a run with
+   skipped database tests does not validate persistence behavior.
+3. Run backend lint/format checks and the frontend lint, test and build commands.
+4. Reimport the updated collection and execute all requests in Postman Runner.
+   Import history automatically selects a real import ID for rejection queries.
+5. Check all three views: valid and invalid filters, pagination, no matches,
+   dependent alarm types, initial/repeated execution counters and original-record
+   disclosure. Dates and counts in comparisons must match the selected interval.
 
-`GET /api/imports/{import_id}/rejections?page=1&page_size=20` returns rejected
-records in source-record order, with their original JSON values, issue fields,
-codes and messages, and audit timestamp. Optional `error_code=INVALID_NUMBER`
-filters records containing that exact issue code (trimmed and uppercased).
-A record with multiple issues is counted once; all its issues remain in the
-response. Unknown valid codes return an empty page. `record_number` is the
-one-based CSV data-record number, excluding the header, rather than a guaranteed
-physical line number when quoted fields contain newlines. Raw source values remain
-unchanged; JSON formatting does not reproduce the original CSV bytes.
-
-Both endpoints return `items` and `pagination` (`page`, `page_size`, `total`,
-`total_pages`); rejection responses also identify `import_id`. Page size defaults
-to 20 and is capped at 100; pages are limited to 1-100000. Malformed input or
-unknown query parameters return 422. An unknown import UUID returns 404, while an
-existing import without rejections returns 200 with an empty list. A database
-failure returns a safe 503. Read-only repeatable-read transactions keep counts and
-items consistent, with a 10-second statement timeout. Existing import-date and
-unique `(import_id, record_number)` indexes support ordering and import isolation.
-No extra table, migration, or data modification is needed. Original records and
-checksums are audit data; restrict access if this assessment is deployed beyond
-the local demonstration environment.
-
-The Data quality frontend remains a placeholder until its separate integration
-phase; these endpoints can already be exercised through `/docs`.
+Missing previous-period history, no filter matches, unknown import (404), and
+invalid input (422) are expected states. Rebuilding containers alone does not
+bootstrap the schema or import data; those operations are explicit in Quick Start.
