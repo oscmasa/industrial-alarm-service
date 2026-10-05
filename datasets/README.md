@@ -281,6 +281,26 @@ For another period or a more damaged source, write to a separate output:
 python scripts/generate_dataset.py --rows 1000 --start 2026-08-01 --end 2026-09-01 --invalid-rate 0.10 --duplicate-rate 0.05 --output datasets/raw/stress.csv
 ```
 
+For another export from the same source, choose a non-overlapping identity range:
+
+```powershell
+python scripts/generate_dataset.py --rows 10000 --seed 99 --start-id 10001 --start 2026-10-01 --end 2026-11-01 --output datasets/raw/alarms_october.csv
+```
+
+`--start-id` defaults to 1 and accepts integers from 1 to 99,999,999. The full
+assigned range must fit eight digits; validation happens before writing output.
+Generator version 1.1 adds `start_id`, `end_id`, and `next_start_id` to the manifest.
+`end_id = start_id + rows - duplicate_count - 1`: original rows consume identities,
+including intentionally invalid rows; copies preserve their original ID.
+`record_number` and `duplicate_of` still refer to CSV record positions, not event
+numbers. `next_start_id` is `end_id + 1`, or null when the eight-digit space is full.
+
+Use this metadata to continue numbering; the maximum accepted database ID omits
+rejected identities. The generator does not query the database or coordinate
+concurrent allocations. Changing seed or period without changing the ID range can
+produce conflicts when imported under the same source. The importer keeps its
+existing identity and conflict rules. The committed version 1.0 manifest remains
+valid evidence for the unchanged sample CSV.
 Generation overwrites the selected CSV and adjacent manifest. Reproducibility
 applies to the same parameters, generator/catalog version, Python version, and
 timezone data. Rows are grouped by generation category, not sorted by timestamp;

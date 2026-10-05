@@ -4,6 +4,8 @@ from decimal import Decimal
 import pytest
 
 from alarm_service.application.use_cases.import_alarms import import_records
+from alarm_service.infrastructure.files.csv_reader import iter_csv_records
+from alarm_service.infrastructure.files.synthetic import generate_dataset
 
 
 class MemoryStore:
@@ -100,3 +102,17 @@ def test_nul_original_is_preserved_losslessly():
     encoded = original_for_jsonb(original)
     assert encoded["encoding"] == "base64-json-utf8"
     assert json.loads(base64.b64decode(encoded["payload"])) == original
+
+
+def test_generated_exports_with_disjoint_ids_accumulate_and_reimport(tmp_path):
+    store = MemoryStore()
+    first, second = tmp_path / "first.csv", tmp_path / "second.csv"
+    summary = generate_dataset(first, rows=100)
+    generate_dataset(second, rows=100, start_id=summary["next_start_id"], seed=99)
+    for path in (first, second):
+        counts = import_records(iter_csv_records(path), store, batch_size=17)
+        assert (counts.accepted, counts.rejected, counts.duplicates) == (95, 3, 2)
+    assert len(store.alarms) == 190
+    repeat = import_records(iter_csv_records(second), store, batch_size=31)
+    assert (repeat.accepted, repeat.rejected, repeat.duplicates) == (0, 3, 97)
+    assert len(store.alarms) == 190

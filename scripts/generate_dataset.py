@@ -20,6 +20,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rows", type=int, default=10_000)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--start-id",
+        type=int,
+        default=1,
+        help="First event number (1-99999999); use a disjoint range for another export.",
+    )
     parser.add_argument("--start", type=date.fromisoformat, default=date(2026, 9, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 10, 1))
     parser.add_argument("--recoverable-rate", type=rate, default=Decimal("0.10"))
@@ -36,6 +42,7 @@ def main() -> None:
             args.output,
             rows=args.rows,
             seed=args.seed,
+            start_id=args.start_id,
             start=args.start,
             end=args.end,
             recoverable_rate=args.recoverable_rate,

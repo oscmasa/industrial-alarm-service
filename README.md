@@ -36,22 +36,79 @@ uses it to decide whether a row is valid.
 ## Quick Start with Docker
 
 Requirements: Git and Docker Desktop running in Linux container mode, with Docker
-Compose available. The commands below use PowerShell from the project root.
-Local Python and an `.env` file are not required for this path.
+Compose available. Use PowerShell; local Python, Node.js and an `.env` file are not
+required. Ports 8000 and 8080 must be free unless customized in `.env`.
+
+### Get the Repository
 
 ```powershell
 git clone https://github.com/oscmasa/industrial-alarm-service.git
 cd industrial-alarm-service
+```
+
+Private repositories require an account with access. If already cloned, open a
+terminal at the project root. Choose **one** of the following setup options; both
+prepare the same services, schema, catalog and sample data.
+
+### Option A Automated Setup
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_project.ps1
+```
+
+The script checks Compose and the running Linux Docker engine, builds and starts
+all services, applies migrations, seeds the catalog, and imports the committed CSV.
+It stops at the first failed command, preserves the database volume and prints the
+actual dashboard and API addresses, including custom ports. Docker Desktop must
+already be running. The execution policy applies only to this PowerShell process;
+it does not change the machine's policy.
+
+Each default run creates a new import execution and its rejection audit; existing
+alarms are deduplicated. For an existing database with the desired data, omit the
+import:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_project.ps1 -SkipImport
+```
+
+`-SkipImport` still starts services, applies migrations and seeds the catalog;
+it does not verify that alarms are present. The script resolves project paths from
+its own location. It does not generate another CSV or reset the database.
+
+### Option B Manual Setup
+
+Run these steps in order from the project root. If a command fails, resolve its
+error before continuing.
+
+**1. Build and start frontend, API and PostgreSQL.**
+
+```powershell
 docker compose up --build -d --wait
+```
+
+**2. Create or update the database tables.**
+
+```powershell
 docker compose exec api python -m alembic upgrade head
+```
+
+**3. Load the equipment and tag catalog.**
+
+```powershell
 docker compose exec api python -m alarm_service.infrastructure.database.seed
+```
+
+**4. Import the committed sample CSV.** No dataset generation is needed to start.
+
+```powershell
 docker compose run --rm -v "${PWD}/datasets/raw:/data:ro" api python -m alarm_service.cli --input /data/alarms.csv --batch-size 1000
 ```
 
-If the repository is private, cloning requires an account with access. If you
-already cloned it, start with the Docker command. Stop any local server using
-port 8000 first. Migrations, catalog loading, and imports are explicit operations;
-starting the API alone does not create tables or load events.
+Skip step 4 if the desired events are already loaded. Migrations, catalog loading
+and imports are explicit operations: starting the API alone does not create
+business tables or load data.
+
+### Verify and Open the Application
 
 On a fresh database, the default CSV import reports:
 
@@ -87,6 +144,14 @@ docker compose logs frontend api db
 docker compose down
 ```
 
+To restart previously initialized services without another import:
+
+```powershell
+docker compose up -d --wait
+```
+
+If startup fails, use `docker compose ps` and the logs above to identify the
+service involved. Docker Desktop must remain running while using the project.
 Stopping the services preserves the `postgres_data` volume. `docker compose down -v`
 deletes that database volume; use it only for an intentional local reset.
 
@@ -340,6 +405,31 @@ The preview does not write to PostgreSQL or deduplicate. It reports 9,700 accept
 rows and 300 rejected rows; deduplication during import reduces accepted events
 to 9,500. See the dataset contract for custom periods, rates, and output paths.
 
+### Generate Additional Exports Without Identity Conflicts
+
+The generator accepts `--start-id` (default 1) to assign a new event-number range
+for another export from the same `SCADA_01` source. For example, after the committed
+September sample:
+
+```powershell
+python scripts/generate_dataset.py --rows 10000 --seed 99 --start-id 10001 --start 2026-10-01 --end 2026-11-01 --output datasets/raw/alarms_october.csv
+docker compose run --rm -v "${PWD}/datasets/raw:/data:ro" api python -m alarm_service.cli --input /data/alarms_october.csv --batch-size 1000
+```
+
+The first assigned event is `EVT-00010001`. New manifests (generator version 1.1)
+include `start_id`, `end_id`, and `next_start_id`. Use `next_start_id` for the next
+file or reserve a larger non-overlapping range. The assigned range includes rows
+that are intentionally invalidated; copies reuse their originals' IDs and do not
+consume additional numbers. Do not infer the next start from the maximum accepted
+ID in the database, because rejected records also used identities.
+
+The start must be an integer from 1 to 99,999,999 and the full assigned range must
+fit eight digits. `next_start_id` is null when that range exhausts the format.
+The generator does not consult PostgreSQL or allocate ranges automatically: avoid
+overlapping ranges when multiple people generate exports. Changing seed or dates
+alone does not assign new identities. Reimporting the same file remains idempotent;
+reusing an identity with different normalized content remains a conflict.
+The committed CSV and its original manifest remain unchanged.
 To run Uvicorn locally, supply `ALARM_DATABASE_URL` for a reachable PostgreSQL
 instance, apply migrations, seed the catalog, then run:
 

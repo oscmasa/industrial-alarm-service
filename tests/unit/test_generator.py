@@ -1,8 +1,11 @@
 import csv
 import hashlib
 import json
+import subprocess
+import sys
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -104,6 +107,12 @@ def test_mutation_coverage_and_temporal_scenarios(tmp_path):
         {"invalid_rate": Decimal("NaN")},
         {"duplicate_rate": Decimal("-0.1")},
         {"recoverable_rate": Decimal("0.9")},
+        {"start_id": 0},
+        {"start_id": -1},
+        {"start_id": 100_000_000},
+        {"start_id": 99_999_999},
+        {"start_id": True},
+        {"start_id": 1.5},
     ],
 )
 def test_invalid_generation_options_do_not_create_output(tmp_path, kwargs):
@@ -127,3 +136,59 @@ def test_configurable_rates_and_period(tmp_path):
     assert sum(summary["expected_outcomes"].values()) == 100
     generate_dataset(tmp_path / "other.csv", rows=100, seed=43)
     assert path.read_bytes() != (tmp_path / "other.csv").read_bytes()
+
+
+def test_offset_preserves_measurements_and_duplicate_provenance(tmp_path):
+    first, second = tmp_path / "first.csv", tmp_path / "second.csv"
+    generate_dataset(first, rows=1000)
+    summary = generate_dataset(second, rows=1000, start_id=10001)
+    original_rows, offset_rows = load(first), load(second)
+    manifest = json.loads(second.with_suffix(".manifest.json").read_text(encoding="utf-8"))
+    assert summary["start_id"] == 10001
+    assert summary["end_id"] == 10980
+    assert summary["next_start_id"] == 10981
+    assert offset_rows[0]["event_id"] == "EVT-00010001"
+    for original, shifted, record in zip(
+        original_rows, offset_rows, manifest["records"], strict=True
+    ):
+        assert {key: value for key, value in original.items() if key != "event_id"} == {
+            key: value for key, value in shifted.items() if key != "event_id"
+        }
+        if record["category"] == "duplicate":
+            assert shifted == offset_rows[record["duplicate_of"] - 1]
+
+
+def test_last_eight_digit_range_and_exhaustion(tmp_path):
+    path = tmp_path / "last.csv"
+    summary = generate_dataset(path, rows=100, start_id=99_999_902)
+    assert summary["end_id"] == 99_999_999
+    assert summary["next_start_id"] is None
+    assert any(row["event_id"] == "EVT-99999999" for row in load(path))
+
+
+@pytest.mark.parametrize("start_id,exit_code", [(10001, 0), (0, 2)])
+def test_start_id_cli(tmp_path, start_id, exit_code):
+    output = tmp_path / "cli.csv"
+    command = Path(__file__).resolve().parents[2] / "scripts/generate_dataset.py"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(command),
+            "--rows",
+            "100",
+            "--start-id",
+            str(start_id),
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == exit_code
+    if exit_code == 0:
+        assert json.loads(result.stdout)["start_id"] == start_id
+        assert load(output)[0]["event_id"] == "EVT-00010001"
+    else:
+        assert "start_id" in result.stderr
+        assert not output.exists()

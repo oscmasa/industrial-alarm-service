@@ -15,6 +15,22 @@ from alarm_service.infrastructure.database.seed import seed_catalog
 from alarm_service.infrastructure.files.synthetic import generate_dataset
 
 
+def test_disjoint_generated_exports_accumulate_in_postgres(database, tmp_path):
+    engine, _ = database
+    with engine.begin() as connection:
+        seed_catalog(connection)
+    first, second = tmp_path / "first.csv", tmp_path / "second.csv"
+    summary = generate_dataset(first, rows=100)
+    generate_dataset(second, rows=100, start_id=summary["next_start_id"], seed=99)
+    for path in (first, second):
+        result = run_import(engine, path, batch_size=17)
+        assert (result["accepted"], result["rejected"], result["duplicates"]) == (95, 3, 2)
+    repeat = run_import(engine, second, batch_size=31)
+    assert (repeat["accepted"], repeat["rejected"], repeat["duplicates"]) == (0, 3, 97)
+    with engine.connect() as connection:
+        assert connection.scalar(select(func.count()).select_from(AlarmModel)) == 190
+
+
 def test_full_dataset_and_repeat_are_idempotent(database, tmp_path):
     engine, _ = database
     with engine.begin() as connection:

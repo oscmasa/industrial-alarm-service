@@ -152,6 +152,7 @@ def generate_dataset(
     *,
     rows: int = 10_000,
     seed: int = 42,
+    start_id: int = 1,
     start: date = date(2026, 9, 1),
     end: date = date(2026, 10, 1),
     recoverable_rate: Decimal = Decimal("0.10"),
@@ -174,6 +175,12 @@ def generate_dataset(
         "duplicate": int(rows * duplicate_rate),
     }
     counts["valid"] = rows - sum(counts.values())
+    if type(start_id) is not int or not 1 <= start_id <= 99_999_999:
+        raise ValueError("start_id must be an integer between 1 and 99,999,999")
+    # Reserve identities for rejected rows too; duplicates reuse an original identity.
+    end_id = start_id + rows - counts["duplicate"] - 1
+    if end_id > 99_999_999:
+        raise ValueError("event ID range exceeds the eight-digit maximum 99,999,999")
     rng = random.Random(seed)
     windows = _windows(start, end)
     events, records = [], []
@@ -219,7 +226,7 @@ def generate_dataset(
                 # Differential pressure episodes concentrate on every seventh day.
                 candidates = windows[::7] if condition == CONDITIONS[4] else windows
                 timestamp = rng.choice(candidates) + timedelta(seconds=rng.randrange(16 * 3600))
-            row = _event(rng, len(events) + 1, condition, timestamp)
+            row = _event(rng, start_id + len(events), condition, timestamp)
             mutations, errors, warnings = [], [], []
             if category == "recoverable":
                 mutation = RECOVERABLE[index % len(RECOVERABLE)]
@@ -283,12 +290,15 @@ def generate_dataset(
         writer.writeheader()
         writer.writerows(events)
     manifest = {
-        "generator_version": "1.0",
+        "generator_version": "1.1",
         "catalog_version": CATALOG_VERSION,
         "source_system": SOURCE_SYSTEM,
         "source_timezone": SOURCE_TIMEZONE,
         "seed": seed,
         "rows": rows,
+        "start_id": start_id,
+        "end_id": end_id,
+        "next_start_id": end_id + 1 if end_id < 99_999_999 else None,
         "start_date": start.isoformat(),
         "end_date_exclusive": end.isoformat(),
         "rates": dict(zip(("recoverable", "invalid", "duplicate"), map(str, rates), strict=True)),
